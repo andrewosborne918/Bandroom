@@ -8,7 +8,7 @@ permissions:
   contents: read
 concurrency:
   group: desktop-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   build:
     strategy:
@@ -97,4 +97,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="desktop-v0.2.0-${GITHUB_SHA:0:7}"
-          gh release create "$tag" installers/* --target "$GITHUB_SHA" --prerelease --title "Bndrm Desktop 0.2 beta" --notes-file desktop/RELEASE-NOTES.md
+          mapfile -t files < <(find installers -type f \( -name '*.dmg' -o -name '*.exe' \))
+          gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" --prerelease --title "Bndrm Desktop 0.2 beta" --notes-file desktop/RELEASE-NOTES.md
