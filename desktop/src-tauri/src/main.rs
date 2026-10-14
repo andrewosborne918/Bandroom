@@ -106,6 +106,7 @@ async fn open_band(
     code: Option<String>,
 ) -> Result<(), String> {
     local(&window)?;
+    let navigate_existing = code.is_some();
     let url = match code {
         Some(c) if c.len() == 10 && c.chars().all(|v| v.is_ascii_hexdigit()) => {
             format!("{ORIGIN}/?desktop={c}")
@@ -114,8 +115,10 @@ async fn open_band(
         None => format!("{ORIGIN}/"),
     };
     if let Some(old) = app.get_webview_window("band") {
-        old.navigate(url.parse().unwrap())
-            .map_err(|_| "Unable to open Bndrm")?;
+        if navigate_existing {
+            old.navigate(url.parse().unwrap())
+                .map_err(|_| "Unable to open Bndrm")?;
+        }
         old.set_focus().map_err(|_| "Unable to focus Bndrm")?;
         return Ok(());
     }

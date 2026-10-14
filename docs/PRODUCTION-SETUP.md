@@ -8,7 +8,7 @@ The previous bandroom-public.vercel.app address is retained during setup. APP_AL
 
 ## Already configured in Vercel
 
-The project uses Next.js, Node 24, repository root, `pnpm install --frozen-lockfile`, and `pnpm build:vercel`. Production configuration includes the supplied Supabase URL and publishable key, APP_PLATFORM=supabase, APP_ENV=production, APP_ORIGIN, AUDIO_STORAGE=r2, the R2 endpoint, R2_BUCKET=bandroom-audio, and generated private WORKER_SECRET and CRON_SECRET values.
+The project uses Next.js, Node 24, repository root, `pnpm install --frozen-lockfile`, and `pnpm build:vercel`. Production configuration includes the supplied Supabase URL and publishable key, APP_PLATFORM=supabase, APP_ENV=production, APP_ORIGIN, AUDIO_STORAGE=r2, the R2 endpoint, R2_BUCKET=bandroom-audio, and a generated private CRON_SECRET value.
 
 Preview deployments must not receive production database or R2 credentials. They display setup state until a separate staging project is configured.
 
@@ -47,7 +47,7 @@ Private logical folders hold originals, stems, temporary uploads and exports in 
 
 After registering and confirming your Bndrm account, copy your user UUID from Supabase Authentication > Users. Set Vercel production APPLICATION_OWNER_IDS to that UUID. Redeploy after adding secrets or changing build-time public configuration.
 
-In Bndrm, open application administration (shield icon) and Download Mac connection. This download is restricted to application owners. Follow worker/SETUP.md using public-worker-config.json. The Mac has only queue credentials, not database or R2 administrator keys. This owner-operated worker handles the public processing queue, including other authorized bands. Uploads wait safely when the Mac is offline. Initial model downloads and actual processing require the Mac to be awake and online.
+Install Bndrm Desktop from https://bndrm.vercel.app/desktop and pair it in your band workspace. Every band supplies its own Mac or Windows processor. Shared WORKER_SECRET connections are superseded. See [DESKTOP.md](DESKTOP.md) for installation, security and release instructions.
 
 ## Public access
 

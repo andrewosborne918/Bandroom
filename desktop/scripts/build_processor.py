@@ -22,12 +22,12 @@ notices=runtime/'bndrm-processor'/'third-party-notices';notices.mkdir(exist_ok=T
 for distribution in importlib.metadata.distributions():
  name=distribution.metadata.get('Name','dependency')
  folder=notices/name;folder.mkdir(exist_ok=True)
- (folder/'METADATA.txt').write_text(str(distribution.metadata),encoding='utf-8')
+ (folder/'METADATA.txt').write_text(distribution.read_text('METADATA') or (name+' '+distribution.version),encoding='utf-8')
  for file in distribution.files or []:
   if any(part.upper().startswith(('LICENSE','LICENCE','COPYING','NOTICE')) for part in file.parts):
    original=distribution.locate_file(file)
    if original.is_file():
-    relative=folder/pathlib.Path(*file.parts)
+    relative=folder/str(file).replace('..','_').replace('\\','__').replace('/','__')
     relative.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(original,relative)
 source=desktop/'build'/'ffmpeg-source'
 if source.exists():shutil.copytree(source,notices/'ffmpeg',dirs_exist_ok=True)
