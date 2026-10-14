@@ -1,0 +1,1 @@
+export function GET(){return new Response(JSON.stringify({status:process.env.APP_PLATFORM==='supabase'&&!process.env.NEXT_PUBLIC_SUPABASE_URL?'setup_required':'ok',environment:process.env.APP_ENV||'legacy'}),{headers:{'Content-Type':'application/json','Cache-Control':'no-store'}})}
