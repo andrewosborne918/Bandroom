@@ -11,6 +11,10 @@ def parse_progress(line):
         return int(match.group(1)),seconds
     except ValueError:return int(match.group(1)),None
 
+def audio_command(module,*args):
+    if getattr(sys,'frozen',False):return [sys.executable,'--'+module,*args]
+    return [sys.executable,'-m',module,*args] if module=='demucs' else [sys.executable,str(pathlib.Path(__file__).resolve().parent/'analyze.py'),*args]
+
 CATEGORIES=('vocals','drums','bass','other')
 class NetworkUnavailable(Exception):pass
 class ConnectionRejected(Exception):pass
@@ -46,12 +50,14 @@ class Worker:
     def command(self,command,stage):
         self.set_progress(stage,0)
         process=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,bufsize=1)
+        self._child=process
         def consume():
             line=''
             for char in iter(lambda:process.stdout.read(1),''):
-                sys.stdout.write(char)
+                stream=sys.stderr if getattr(sys,'frozen',False) else sys.stdout
+                stream.write(char)
                 if char in '\r\n':
-                    sys.stdout.flush()
+                    stream.flush()
                     if 'BANDROOM_STAGE:' in line:self.set_progress(line.split('BANDROOM_STAGE:')[-1].strip())
                     else:
                         parsed=parse_progress(line)
@@ -62,6 +68,7 @@ class Worker:
         try:code=process.wait(timeout=3300)
         except subprocess.TimeoutExpired:process.kill();process.wait();raise
         finally:reader.join(timeout=10);process.stdout.close()
+        self._child=None
         if code:raise subprocess.CalledProcessError(code,command)
     def folder(self,job):
         if not re.fullmatch(r'[a-zA-Z0-9_-]{1,80}',job['id']):raise ValueError('Invalid job identifier')
@@ -84,7 +91,7 @@ class Worker:
         complete=root/'separated.done'
         if not complete.exists() or not all((stemdir/(c+'.wav')).exists() for c in CATEGORIES):
             print('Separating instruments. Results will be kept locally until Bndrm confirms saving.',flush=True)
-            self.command([sys.executable,'-m','demucs','--int24','-n','htdemucs','-d','cpu','-j','1','-o',str(root/'out'),str(source)],'separating')
+            self.command(audio_command('demucs','--int24','-n','htdemucs','-d','cpu','-j','1','-o',str(root/'out'),str(source)),'separating')
             for category in CATEGORIES:
                 if abs(sf.info(stemdir/(category+'.wav')).duration-actual)>.1:raise ValueError('Separated stem duration mismatch')
             complete.write_text('complete')
@@ -98,7 +105,7 @@ class Worker:
             try:online=self.call('GET','/'+job['id']+'/lyrics',lease=job['lease']).json()
             except JobUnavailable:pass
             online_path=root/'online-lyrics.json';online_path.write_text(json.dumps(online))
-            self.command([sys.executable,str(pathlib.Path(__file__).resolve().parent/'analyze.py'),str(source),str(stemdir),str(temp),'--online-lyrics',str(online_path)],'beats')
+            self.command(audio_command('analyze',str(source),str(stemdir),str(temp),'--online-lyrics',str(online_path)),'beats')
             json.loads(temp.read_text());temp.replace(analysis)
         return stemdir,json.loads(analysis.read_text())
     def deliver(self,job,root,stemdir,analysis):

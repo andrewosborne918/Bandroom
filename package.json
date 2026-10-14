@@ -14,7 +14,7 @@
     "db:generate": "drizzle-kit generate",
     "build:vercel": "next build --webpack",
     "start:vercel": "next start",
-    "test": "node --test tests/core.test.mjs tests/platform-db.test.mjs tests/recognition.test.mjs tests/import-info.test.mjs tests/public-hosting.test.mjs",
+    "test": "node --test tests/core.test.mjs tests/platform-db.test.mjs tests/recognition.test.mjs tests/import-info.test.mjs tests/public-hosting.test.mjs tests/desktop-db.test.mjs",
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {

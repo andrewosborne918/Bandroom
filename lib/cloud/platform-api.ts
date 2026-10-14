@@ -4,7 +4,7 @@ export async function sha(value:string){return [...new Uint8Array(await crypto.s
 export async function platformApi(req:Request){const p=new URL(req.url).pathname.split('/').filter(Boolean).slice(2);try{origin(req);
  if(p[0]==='config')return json({enabled:configured(),environment:process.env.APP_ENV||'development',google:process.env.NEXT_PUBLIC_GOOGLE_LOGIN==='true'});
  const {db,user}=await identity();
- if(p[0]==='worker-config'&&req.method==='GET'){if(!(process.env.APPLICATION_OWNER_IDS||'').split(',').includes(user.id))problem('Only the application owner can download the processor connection',403);if(!process.env.WORKER_SECRET)problem('Worker credentials are not configured',503);return json({url:process.env.APP_ORIGIN,secret:process.env.WORKER_SECRET,version:1})}
+ if(p[0]==='worker-config')problem('Install Bndrm Desktop and connect it to your band. Shared processor credentials are no longer distributed.',410);
 
  if(p[0]==='me'){
  if(req.method==='GET'){const profile=await result(db.from('profiles').select('*').eq('id',user.id).single());const memberships=await result(db.from('band_memberships').select('band_id,role,bands(id,name,suspended)').eq('user_id',user.id));const {data:jar}= {data:await cookies()};return json({user:{id:user.id,email:user.email},profile,memberships,activeBand:jar.get('bandroom-band')?.value,applicationOwner:(process.env.APPLICATION_OWNER_IDS||'').split(',').includes(user.id)})}

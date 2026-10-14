@@ -39,3 +39,7 @@ Tests exercise song privacy, database permissions, reservations, job retries, ch
 The htdemucs model creates vocals, drums, bass and other stems. Tempo and chord estimates may need correction. Lyrics lookup uses LRCLIB before Whisper fallback; catalog recognition requires an optional AudD credential. Authored chords and tabs remain editable. Untimed charts and tabs use estimated timing; the app does not extract accurate tablature automatically.
 
 All stems share the original recording start, including leading silence. Import GarageBand exports from the same song range. Personal audio preferences are independent from the band's saved backing arrangement. Browser scheduling is synchronized to an estimated shared clock; output hardware, Bluetooth, network and browser behavior can affect actual audible synchronization.
+
+## Bndrm Desktop
+
+Installable Mac and Windows processing companion with secure per-band pairing and the existing web library/session UI. See [desktop setup and release notes](docs/DESKTOP.md). Installers appear at https://bndrm.vercel.app/desktop after the release workflow succeeds.

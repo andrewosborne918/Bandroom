@@ -92,7 +92,9 @@ class PublicWorker(Worker):
             time.sleep(3)
     def run(self):
         import threading
-        threading.Thread(target=self.heartbeat,daemon=True).start()
+        if not getattr(self,'_heartbeat_started',False):
+            self._heartbeat_started=True
+            threading.Thread(target=self.heartbeat,daemon=True).start()
         print('Standalone Bndrm processor connected. Waiting for uploads. Ctrl+C stops it.',flush=True)
         while True:
             try:

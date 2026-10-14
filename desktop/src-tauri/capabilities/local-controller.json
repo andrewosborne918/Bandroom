@@ -1,0 +1,1 @@
+{"identifier":"local-controller","description":"Only the bundled processor controls can use native commands. The online band window has no native permissions.","windows":["main"],"permissions":["core:default"]}

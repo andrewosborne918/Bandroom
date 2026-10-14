@@ -1,3 +1,7 @@
+# Desktop users
+
+Use the packaged Bndrm Desktop app and band pairing described in [DESKTOP.md](../docs/DESKTOP.md). The older shared public-worker configuration below is superseded and cannot authenticate to the public processor endpoint. These scripts remain for development and legacy Sites operations.
+
 # Connect your existing Mac processor
 
 Use the existing Bndrm folder and its working .venv. No model reinstall is needed.

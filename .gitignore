@@ -68,3 +68,10 @@ worker-config.json
 .bandroom-cache/
 .bandroom-public-cache/
 .venv/
+/desktop/src-tauri/target/
+/desktop/src-tauri/runtime/
+/desktop/build/
+/desktop/node_modules/
+
+/supabase/.temp/
+/desktop/src-tauri/icons/
