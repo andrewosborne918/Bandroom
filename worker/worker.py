@@ -34,7 +34,7 @@ class Worker:
                 r.raise_for_status();self.network_interrupted=False;return r
             except (requests.ConnectionError,requests.Timeout) as e:
                 self.network_interrupted=True;delay=min(30,2**attempt)
-                print(f'Bandroom connection interrupted ({type(e).__name__}). Finished files are retained. Retrying in {delay}s.',flush=True)
+                print(f'Bndrm connection interrupted ({type(e).__name__}). Finished files are retained. Retrying in {delay}s.',flush=True)
                 if attempt==4:raise NetworkUnavailable() from e
                 time.sleep(delay)
     def set_progress(self,stage,percent=None,eta=None):
@@ -83,7 +83,7 @@ class Worker:
         if actual<=0 or actual>limits['seconds']:raise ValueError('Recording exceeds configured duration limit')
         complete=root/'separated.done'
         if not complete.exists() or not all((stemdir/(c+'.wav')).exists() for c in CATEGORIES):
-            print('Separating instruments. Results will be kept locally until Bandroom confirms saving.',flush=True)
+            print('Separating instruments. Results will be kept locally until Bndrm confirms saving.',flush=True)
             self.command([sys.executable,'-m','demucs','--int24','-n','htdemucs','-d','cpu','-j','1','-o',str(root/'out'),str(source)],'separating')
             for category in CATEGORIES:
                 if abs(sf.info(stemdir/(category+'.wav')).duration-actual)>.1:raise ValueError('Separated stem duration mismatch')
@@ -119,7 +119,7 @@ class Worker:
                 self.call('PUT','/'+job['id']+'/result',lease=job['lease'],params={'category':category,'duration':info.duration,'sampleRate':info.samplerate},data=ReportingFile()).close()
             completed_bytes+=size;self.set_progress('uploading',100*completed_bytes/max(1,total_bytes),(total_bytes-completed_bytes)*(time.monotonic()-upload_began)/completed_bytes)
         self.set_progress('saving');self.call('POST','/'+job['id']+'/finish',lease=job['lease'],json={'analysis':analysis}).close()
-        print('Saved to Bandroom: '+job['filename']+'. Stems, timing and charts are ready for review.',flush=True)
+        print('Saved to Bndrm: '+job['filename']+'. Stems, timing and charts are ready for review.',flush=True)
         shutil.rmtree(root)
     def process(self,job,limits):
         self.progress={};self.active=job.copy();self.set_progress('downloading');root=self.folder(job);self.record(root,job,limits)
@@ -129,7 +129,7 @@ class Worker:
         except Exception as e:
             print('Audio processing failed: '+type(e).__name__+'. Results retained at '+str(root),flush=True)
             self.call('POST','/'+job['id']+'/finish',lease=job['lease'],json={'error':'Audio processing failed: '+type(e).__name__}).close()
-            (root/'paused').write_text('Use Retry in Bandroom')
+            (root/'paused').write_text('Use Retry in Bndrm')
         finally:self.active={}
     def pending(self):
         for file in sorted(self.cache.glob('*/job.json')):
@@ -140,7 +140,7 @@ class Worker:
                 if e.args[0] in (404,410):shutil.rmtree(file.parent);continue
                 raise
             if response.get('completed') or response.get('deleted'):shutil.rmtree(file.parent);continue
-            if response.get('failed'):(file.parent/'paused').write_text('Use Retry in Bandroom');print('A saved job needs Retry in the song editor.',flush=True);continue
+            if response.get('failed'):(file.parent/'paused').write_text('Use Retry in Bndrm');print('A saved job needs Retry in the song editor.',flush=True);continue
             return response['job'],saved['limits']
         return None
     def heartbeat(self):
@@ -156,7 +156,7 @@ class Worker:
             except requests.RequestException:pass
             time.sleep(3)
     def run(self):
-        threading.Thread(target=self.heartbeat,daemon=True).start();print('Mac processor running. Waiting for Bandroom uploads. Ctrl+C stops it.',flush=True)
+        threading.Thread(target=self.heartbeat,daemon=True).start();print('Mac processor running. Waiting for Bndrm uploads. Ctrl+C stops it.',flush=True)
         while True:
             try:
                 pending=self.pending()
@@ -167,6 +167,6 @@ class Worker:
                 self.process(job,limits)
             except ConnectionRejected as e:print(str(e),flush=True);return
             except (NetworkUnavailable,JobUnavailable):time.sleep(15)
-            except requests.RequestException as e:print('Bandroom request failed ('+type(e).__name__+'). Cached files retained. Retrying.',flush=True);time.sleep(15)
+            except requests.RequestException as e:print('Bndrm request failed ('+type(e).__name__+'). Cached files retained. Retrying.',flush=True);time.sleep(15)
             except (ValueError,KeyError):print('Unexpected server response. Check the connection file and app sign-in access.',flush=True);time.sleep(30)
 if __name__=='__main__':Worker().run()

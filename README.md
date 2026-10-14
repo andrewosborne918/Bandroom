@@ -1,6 +1,6 @@
-# Bandroom
+# Bndrm
 
-A standalone band playback app with private song libraries, aligned stems, band click and cues, audience output, lyrics, chord charts and tabs. Users sign in with Bandroom email accounts. No ChatGPT account is required.
+A standalone band playback app with private song libraries, aligned stems, band click and cues, audience output, lyrics, chord charts and tabs. Users sign in with Bndrm email accounts. No ChatGPT account is required.
 
 ## Hosting
 

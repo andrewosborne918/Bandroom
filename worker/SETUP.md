@@ -1,10 +1,10 @@
 # Connect your existing Mac processor
 
-Use the existing Bandroom folder and its working .venv. No model reinstall is needed.
+Use the existing Bndrm folder and its working .venv. No model reinstall is needed.
 
 1. Download this GitHub repository as a ZIP and unzip it.
 2. Stop the current worker with Control+C after any active job finishes.
-3. Copy these five files from the ZIP's worker folder into your existing Bandroom folder: worker.py, cloud_worker.py, analyze.py, start_public_worker.py, start-public-worker.sh.
+3. Copy these five files from the ZIP's worker folder into your existing Bndrm folder: worker.py, cloud_worker.py, analyze.py, start_public_worker.py, start-public-worker.sh.
 4. In the standalone app's owner administration panel, download the Mac connection and place public-worker-config.json in the same folder.
 5. Run:
 

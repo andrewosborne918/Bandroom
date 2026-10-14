@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Bandroom | Play together",
+  title: "Bndrm | Play together",
   description: "Shared stems, click, and musician charts.",
   icons: {
     icon: "/favicon.svg",

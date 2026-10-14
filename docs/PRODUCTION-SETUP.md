@@ -45,9 +45,9 @@ Private logical folders hold originals, stems, temporary uploads and exports in 
 
 ## Application owner and Mac connection
 
-After registering and confirming your Bandroom account, copy your user UUID from Supabase Authentication > Users. Set Vercel production APPLICATION_OWNER_IDS to that UUID. Redeploy after adding secrets or changing build-time public configuration.
+After registering and confirming your Bndrm account, copy your user UUID from Supabase Authentication > Users. Set Vercel production APPLICATION_OWNER_IDS to that UUID. Redeploy after adding secrets or changing build-time public configuration.
 
-In Bandroom, open application administration (shield icon) and Download Mac connection. This download is restricted to application owners. Follow worker/SETUP.md using public-worker-config.json. The Mac has only queue credentials, not database or R2 administrator keys. This owner-operated worker handles the public processing queue, including other authorized bands. Uploads wait safely when the Mac is offline. Initial model downloads and actual processing require the Mac to be awake and online.
+In Bndrm, open application administration (shield icon) and Download Mac connection. This download is restricted to application owners. Follow worker/SETUP.md using public-worker-config.json. The Mac has only queue credentials, not database or R2 administrator keys. This owner-operated worker handles the public processing queue, including other authorized bands. Uploads wait safely when the Mac is offline. Initial model downloads and actual processing require the Mac to be awake and online.
 
 ## Public access
 

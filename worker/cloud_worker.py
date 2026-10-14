@@ -1,4 +1,4 @@
-"""Standalone Bandroom worker. Reuses Mac tools, progress and durable checkpoints."""
+"""Standalone Bndrm worker. Reuses Mac tools, progress and durable checkpoints."""
 import json,os,pathlib,shutil,sys,time,uuid,zipfile
 import requests,soundfile as sf
 from worker import Worker,NetworkUnavailable,ConnectionRejected,JobUnavailable,CATEGORIES
@@ -62,12 +62,12 @@ class PublicWorker(Worker):
                         self.set_progress('uploading',(index+1)*25)
                     self.set_progress('saving')
                     self.call('POST','/'+job['id']+'/finish',job['lease'],json={'stems':outputs,'analysis':analysis})
-            print('Saved to Bandroom: '+job.get('filename',job['kind']),flush=True);shutil.rmtree(root)
+            print('Saved to Bndrm: '+job.get('filename',job['kind']),flush=True);shutil.rmtree(root)
         except (NetworkUnavailable,ConnectionRejected,JobUnavailable):raise
         except Exception as error:
             print('Processing failed: '+type(error).__name__+'. Local results retained.',flush=True)
             self.call('POST','/'+job['id']+'/finish',job['lease'],json={'error':'Audio processing failed: '+type(error).__name__})
-            (root/'paused').write_text('Use Retry in Bandroom')
+            (root/'paused').write_text('Use Retry in Bndrm')
         finally:self.active={}
     def pending(self):
         for file in sorted(self.cache.glob('*/job.json')):
@@ -76,7 +76,7 @@ class PublicWorker(Worker):
             try:
                 response=self.call('POST','/'+job['id']+'/resume',job['lease'],json={}).json()
                 if response.get('completed'):shutil.rmtree(file.parent);continue
-                if response.get('failed'):(file.parent/'paused').write_text('Use Retry in Bandroom');continue
+                if response.get('failed'):(file.parent/'paused').write_text('Use Retry in Bndrm');continue
                 return job,saved['limits']
             except JobUnavailable:
                 (file.parent/'paused').write_text('Job ended or was reassigned')
@@ -93,7 +93,7 @@ class PublicWorker(Worker):
     def run(self):
         import threading
         threading.Thread(target=self.heartbeat,daemon=True).start()
-        print('Standalone Bandroom processor connected. Waiting for uploads. Ctrl+C stops it.',flush=True)
+        print('Standalone Bndrm processor connected. Waiting for uploads. Ctrl+C stops it.',flush=True)
         while True:
             try:
                 pending=self.pending()

@@ -24,7 +24,7 @@ export async function handleBand(request: Request, bucket: R2Bucket, env:Process
     const received=Date.now(), url=new URL(request.url), parts=url.pathname.split('/').filter(Boolean).slice(2), method=request.method;
     const user=request.headers.get('oai-authenticated-user-id');
     const separated=await separationApi(request,bucket,env,user);if(separated)return separated;
-    if(!user) return reply({error:'Sign in to use Bandroom.'},401);
+    if(!user) return reply({error:'Sign in to use Bndrm.'},401);
     if(method!=='GET' && request.headers.get('Origin') && request.headers.get('Origin')!==url.origin) return reply({error:'Invalid request origin'},403);
     const prefix='library/'+encodeURIComponent(user)+'/', key=(sid:string)=>prefix+'songs/'+id(sid)+'.json';
     if(parts[0]==='mac-setup'&&method==='GET'){

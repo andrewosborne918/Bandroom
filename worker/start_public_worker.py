@@ -3,7 +3,7 @@ import json,os,pathlib,runpy,sys
 root=pathlib.Path(__file__).resolve().parent
 config=root/'public-worker-config.json'
 if not config.exists():
-    print('Download the Mac connection in Bandroom administration, then put public-worker-config.json in this Bandroom folder.')
+    print('Download the Mac connection in Bndrm administration, then put public-worker-config.json in this Bndrm folder.')
     sys.exit(1)
 config.chmod(0o600)
 data=json.loads(config.read_text())
