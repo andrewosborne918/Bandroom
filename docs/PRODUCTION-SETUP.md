@@ -13,6 +13,8 @@ Preview deployments must not receive production database or R2 credentials. They
 
 ## Supabase database
 
+All eight initial migrations were applied to this project on 14 October 2026 and verified. Their repository filenames match the actual Supabase migration versions. Do not rerun the initial schema in the SQL Editor.
+
 The repository contains ordered SQL migrations in supabase/migrations. If the GitHub integration applies them automatically, inspect its migration results before running them manually. Otherwise apply each migration in filename order to the new project using the SQL Editor, or use `supabase link --project-ref hxwpdflqzmrgnxmodhgn` followed by `supabase db push` from a reviewed checkout. Never apply initial migrations twice. The database stores authorization and quotas even when audio objects live in R2.
 
 For this production project, set these Auth settings:
@@ -48,7 +50,7 @@ In Bandroom, open application administration (shield icon) and Download Mac conn
 
 ## Public access
 
-The production origin must open without Vercel Authentication. Keep preview deployment protection enabled. Test the assigned production domain in a private browser window, then register a second account and verify separate band libraries. Do not make private storage buckets public to solve a website sign-in problem.
+The production origin is configured for public access. Vercel Authentication protects previews only. Test the assigned production domain in a private browser window, then register a second account and verify separate band libraries. Do not make private storage buckets public to solve a website sign-in problem.
 
 ## Readiness and acceptance
 
