@@ -1,6 +1,6 @@
 [
   {
-    "AllowedOrigins": ["https://bandroom-public.vercel.app"],
+    "AllowedOrigins": ["https://bndrm.vercel.app", "https://bandroom-public.vercel.app"],
     "AllowedMethods": ["GET", "HEAD", "PUT"],
     "AllowedHeaders": ["Content-Type", "Range"],
     "ExposeHeaders": ["ETag", "Content-Length", "Content-Range"],

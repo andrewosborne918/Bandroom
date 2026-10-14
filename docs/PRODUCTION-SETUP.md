@@ -3,7 +3,8 @@
 Target repository: https://github.com/andrewosborne918/Bandroom
 Vercel project: bandroom-public (`prj_byeQCG1y5ZvJG5mkR8BRoOT5VqFW`)
 Supabase project: hxwpdflqzmrgnxmodhgn
-Production origin: https://bandroom-public.vercel.app
+Production origin: https://bndrm.vercel.app
+The previous bandroom-public.vercel.app address is retained during setup. APP_ALLOWED_ORIGINS permits that previous origin. R2 CORS permits both addresses. Configure Supabase redirects for the primary address before inviting users.
 
 ## Already configured in Vercel
 
@@ -19,8 +20,8 @@ The repository contains ordered SQL migrations in supabase/migrations. If the Gi
 
 For this production project, set these Auth settings:
 
-- Site URL: https://bandroom-public.vercel.app
-- Redirect allowlist: https://bandroom-public.vercel.app/auth/callback and https://bandroom-public.vercel.app/auth/callback?type=recovery
+- Site URL: https://bndrm.vercel.app
+- Redirect allowlist: https://bndrm.vercel.app/auth/callback and https://bndrm.vercel.app/auth/callback?type=recovery
 - Email/password signup enabled, email confirmation enabled, minimum password length 12.
 - Custom SMTP configured for invitations, signup confirmations and recovery emails. The default Supabase email service is restricted and is not a general public signup mailer.
 

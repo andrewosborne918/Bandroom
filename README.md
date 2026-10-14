@@ -9,7 +9,7 @@ A standalone band playback app with private song libraries, aligned stems, band 
 - Audio: private Cloudflare R2 with expiring, operation-specific signed URLs.
 - Audio separation and analysis: the owner's existing Mac, using Demucs, librosa and Whisper. No Modal or Railway service is needed.
 
-The production project is `bandroom-public`; the intended origin is `https://bandroom-public.vercel.app`. This source is a standalone migration of the rehearsal app. Existing ChatGPT Sites data is not automatically moved.
+The production project is `bandroom-public`; the intended origin is `https://bndrm.vercel.app`. This source is a standalone migration of the rehearsal app. Existing ChatGPT Sites data is not automatically moved.
 
 See [production setup](docs/PRODUCTION-SETUP.md) for the remaining account settings and [Mac worker setup](worker/SETUP.md).
 
