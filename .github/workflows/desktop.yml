@@ -56,6 +56,7 @@ jobs:
             ~/.cargo/git
             desktop/src-tauri/target
           key: bndrm-rust-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('desktop/src-tauri/Cargo.lock') }}
+          restore-keys: bndrm-rust-${{ runner.os }}-${{ runner.arch }}-
       - name: Install desktop build tools
         working-directory: desktop
         run: npm ci
@@ -97,6 +98,13 @@ jobs:
       - name: Build installer
         working-directory: desktop
         run: npm run build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundle }} -- --locked
+      - name: Verify the installed Mac app from the final DMG
+        if: runner.os == 'macOS'
+        run: python desktop/scripts/verify_macos_bundle.py desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg
+      - name: Verify the installed Windows app from the final installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./desktop/scripts/verify_windows_installer.ps1 -InstallerDirectory desktop/src-tauri/target/${{ matrix.target }}/release/bundle/nsis
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: bndrm-${{ matrix.target }}
@@ -128,6 +136,6 @@ jobs:
             echo 'A newer build supersedes this release.'
             exit 0
           fi
-          tag="desktop-v0.2.1-${GITHUB_SHA:0:7}"
+          tag="desktop-v0.2.2-${GITHUB_SHA:0:7}"
           mapfile -t files < <(find installers -type f \( -name '*.dmg' -o -name '*.exe' \))
-          gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" --prerelease --title "Bndrm Desktop 0.2.1 beta" --notes-file desktop/RELEASE-NOTES.md
+          gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" --prerelease --title "Bndrm Desktop 0.2.2 beta" --notes-file desktop/RELEASE-NOTES.md

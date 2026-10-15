@@ -1,6 +1,6 @@
 [package]
 name = "bndrm-desktop"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 [build-dependencies]
 tauri-build = { version = "=2.7.3", features = [] }
@@ -10,4 +10,4 @@ serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = "=1.0.145"
 reqwest = { version = "=0.12.24", default-features = false, features = ["json", "rustls-tls"] }
 keyring = { version = "=3.6.3", features = ["apple-native", "windows-native"] }
-libc = "=0.2.177"
+libc = "=0.2.277"
