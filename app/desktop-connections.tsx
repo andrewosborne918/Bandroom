@@ -9,16 +9,17 @@ export default function DesktopConnections({bandId}:{bandId:string}){
   const r=await fetch('/api/desktop/'+path,{method:body?'POST':'GET',headers:{'x-band-id':bandId,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});
   const b=await r.json() as Reply;if(!r.ok)throw Error(b.error||'Connection failed');return b;
  },[bandId]);
- useEffect(()=>{let active=true;async function refresh(initial=false){try{const b=await call('devices');if(active){setDevices(markOnline(b.devices));if(initial)setCode(new URLSearchParams(location.search).get('desktop')||sessionStorage.getItem('bndrm-desktop-code')||'')}}catch(e){if(active)setMessage(e instanceof Error?e.message:'Unable to load processors')}}void refresh(true);const t=setInterval(()=>void refresh(),10000);return()=>{active=false;clearInterval(t)}},[call]);
+ useEffect(()=>{let active=true;async function refresh(initial=false){try{if(initial&&active)setCode(new URLSearchParams(location.search).get('desktop')||sessionStorage.getItem('bndrm-desktop-code')||'');const b=await call('devices');if(active)setDevices(markOnline(b.devices))}catch(e){if(active)setMessage(e instanceof Error?e.message:'Unable to load processors')}}void refresh(true);const t=setInterval(()=>void refresh(),10000);return()=>{active=false;clearInterval(t)}},[call]);
  async function act(fn:()=>Promise<void>){setBusy(true);setMessage('');try{await fn();setDevices(markOnline((await call('devices')).devices))}catch(e){setMessage(e instanceof Error?e.message:'Connection failed')}finally{setBusy(false)}}
+ const approving=code.replace(/[^A-Z0-9]/g,'').length===10;
  return <section className="desktop-connections">
-  <h3>Your band’s desktop processors</h3>
-  <p className="form-hint">Install Bndrm on a Mac or Windows PC. Connect it once, then just drop songs into the library. Separation and analysis queue automatically. That computer processes this band’s uploads while Bndrm Desktop is open.</p>
-  <a className="button subtle" href="/desktop" target="_blank" rel="noreferrer">Get Bndrm Desktop</a>
-  <label>Connection code from the desktop app<input value={code} onChange={e=>setCode(e.target.value.toUpperCase())} maxLength={14} autoComplete="off" placeholder="AB12C DE345"/></label>
+  <h3>{approving?'Approve your desktop connection':'Your band’s desktop processors'}</h3>
+  <p className="form-hint">{approving?'Your connection code is ready. Click Connect to this band below to approve the computer that displayed this code. Its processor starts automatically and picks up queued songs.':'Connect a computer once, then just drop songs into the library. Separation and analysis queue automatically while Bndrm Desktop is open.'}</p>
+  {!approving&&!devices.length&&<a className="button subtle" href="/desktop" target="_blank" rel="noreferrer">Need the desktop app? Download for Mac or Windows</a>}
+  <label>Connection code<input value={code} onChange={e=>setCode(e.target.value.toUpperCase())} maxLength={14} autoComplete="off" placeholder="AB12C DE345"/></label>
   <button className="button primary" disabled={busy||code.replace(/[^A-Z0-9]/g,'').length!==10} onClick={()=>void act(async()=>{await call('approve',{code});setCode('');sessionStorage.removeItem('bndrm-desktop-code');setMessage('Computer connected. Bndrm Desktop starts automatically and picks up queued songs. Keep it open while processing.');const url=new URL(location.href);url.searchParams.delete('desktop');history.replaceState({},'',url)})}>Connect to this band</button>
   {devices.map(d=><div className="member-row" key={d.id}><span>{d.name}<small>{d.platform} · {d.online?'Online':'Offline'}</small></span><button className="button subtle" disabled={busy} onClick={()=>void act(async()=>{await call('revoke',{id:d.id});setMessage('Connection revoked. This computer can no longer access the queue.')})}>Revoke</button></div>)}
-  {!devices.length&&<p className="form-hint">No computers connected yet. Uploads can queue until your processor is online.</p>}
+  {!devices.length&&!approving&&<p className="form-hint">No computers connected yet. Uploads can queue until your processor is online.</p>}
   {message&&<p role="status">{message}</p>}
  </section>
 }
