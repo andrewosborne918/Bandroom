@@ -28,3 +28,11 @@ export const r2Key=(bucket:string,key:string)=>{
  if(!['originals','stems','temporary','charts','exports'].includes(bucket))throw Error('Invalid audio bucket');
  return bucket+'/'+key;
 };
+
+// Verify uploaded objects without downloading their audio bodies. The request
+// method must match the method bound into the signature.
+export async function r2ObjectInfo(config:R2Config,key:string){
+ const response=await fetch(presign(config,'HEAD',key),{method:'HEAD',signal:AbortSignal.timeout(15000),cache:'no-store'});
+ if(!response.ok)throw Error('Object unavailable');
+ return {size:Number(response.headers.get('content-length')),etag:response.headers.get('etag')};
+}

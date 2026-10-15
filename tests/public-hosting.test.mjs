@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {presign,r2Key} from '../lib/cloud/r2.ts';
+import {presign,r2Key,r2ObjectInfo} from '../lib/cloud/r2.ts';
 import {validateSong} from '../lib/cloud/song-validation.ts';
 import {countInSeconds} from '../lib/timeline.ts';
 const config={endpoint:'https://example.r2.cloudflarestorage.com',bucket:'private-audio',accessKey:'example-access',secretKey:'server-only-secret'};
@@ -28,4 +28,17 @@ test('renaming an imported click or spoken cue cannot open the audience path',()
   const saved=validateSong({...old,stems:[{...old.stems[0],name:'Guitar',category:'guitar',bandOnly:false}]},old.id,old);
   assert.equal(saved.stems[0].bandOnly,true);
  }
+});
+
+test('uploaded R2 stems are verified with HEAD matching the signed method, without downloading audio',async t=>{
+ let calls=0;
+ t.mock.method(globalThis,'fetch',async(url,options)=>{
+  calls++;assert.equal(options.method,'HEAD');assert.equal(options.cache,'no-store');
+  const signed=new URL(url),stamp=signed.searchParams.get('X-Amz-Date');
+  const now=new Date(stamp.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z/,'$1-$2-$3T$4:$5:$6Z'));
+  assert.equal(url,presign(config,options.method,'stems/bands/band-a/drums.wav',60,{now}));
+  return new Response(null,{headers:{'content-length':'60000000',etag:'verified-stem'}});
+ });
+ assert.deepEqual(await r2ObjectInfo(config,'stems/bands/band-a/drums.wav'),{size:60000000,etag:'verified-stem'});
+ assert.equal(calls,1);
 });
