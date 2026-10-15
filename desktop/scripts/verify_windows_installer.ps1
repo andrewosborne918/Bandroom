@@ -1,7 +1,7 @@
 param([Parameter(Mandatory=$true)][string]$InstallerDirectory)
 $ErrorActionPreference = 'Stop'
 $installers = @(Get-ChildItem -LiteralPath $InstallerDirectory -Filter '*.exe')
-if ($installers.Count -ne 1) { throw 'Expected exactly one Windows installer' }
+if ($installers.Count -ne 1) { throw "Expected exactly one Windows installer, found: $($installers.Name -join ', ')" }
 $signature = Get-AuthenticodeSignature -LiteralPath $installers[0].FullName
 Write-Host "Windows installer Authenticode status: $($signature.Status)"
 # This beta is intentionally unsigned. A present but invalid signature fails.

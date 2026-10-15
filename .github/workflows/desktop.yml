@@ -95,6 +95,8 @@ jobs:
       - name: Test actual frozen audio inference on Windows
         if: runner.os == 'Windows'
         run: python desktop/scripts/smoke_test.py desktop/src-tauri/runtime/bndrm-processor/bndrm-processor.exe
+      - name: Clear cached installer outputs
+        run: python -c "import shutil; shutil.rmtree('desktop/src-tauri/target/${{ matrix.target }}/release/bundle', ignore_errors=True)"
       - name: Build installer
         working-directory: desktop
         run: npm run build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundle }} -- --locked

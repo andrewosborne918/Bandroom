@@ -1,0 +1,53 @@
+# One-time recovery of the two Mac artifacts that passed final-DMG checks.
+# Windows verification failed in this run; no Windows artifact is published here.
+name: Publish verified Mac signing fix
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/recover-verified-macs.yml']
+permissions:
+  contents: read
+jobs:
+  publish-verified-macs:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Require successful installed-app checks for both Mac artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/38778821531" --jq '.head_sha' | grep -Fx '39dd846737d2856dad4c1ed6cfcb62a2d65b0f74'
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/38778821531/jobs" > /tmp/bndrm-verified-mac-jobs.json
+          python - <<'PY'
+          import json
+          jobs=json.load(open('/tmp/bndrm-verified-mac-jobs.json'))['jobs']
+          macs=[j for j in jobs if j['name'].startswith('build (macos-')]
+          assert len(macs)==2, 'Expected both Mac architectures'
+          for job in macs:
+              assert job['conclusion']=='success', job['name']
+              checks=[s for s in job['steps'] if s['name']=='Verify the installed Mac app from the final DMG']
+              assert len(checks)==1 and checks[0]['conclusion']=='success', job['name']
+          PY
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          run-id: 38778821531
+          github-token: ${{ github.token }}
+          pattern: bndrm-*-apple-darwin
+          path: verified-mac-installers
+          merge-multiple: true
+      - name: Publish only the verified Mac installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag='desktop-v0.2.2-39dd846'
+          if gh release view "$tag" >/dev/null 2>&1; then exit 0; fi
+          mapfile -t files < <(find verified-mac-installers -type f -name 'Bndrm_0.2.2_*.dmg')
+          test "${#files[@]}" -eq 2
+          gh release create "$tag" "${files[@]}" --target 39dd846737d2856dad4c1ed6cfcb62a2d65b0f74 --prerelease --title 'Bndrm Desktop 0.2.2 beta - Mac signing fix' --notes-file desktop/RELEASE-NOTES.md

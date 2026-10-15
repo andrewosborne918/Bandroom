@@ -16,10 +16,15 @@ export default function DesktopDownloads(){
   fetch('https://api.github.com/repos/andrewosborne918/Bandroom/releases?per_page=20',{signal:c.signal})
    .then(r=>{if(!r.ok)throw Error();return r.json() as Promise<Release[]>})
    .then(rows=>{
-    // Publish one complete release across all three supported architectures.
-    const release=rows.find(r=>r.tag_name.startsWith('desktop-v')&&!r.draft&&r.assets.some(a=>allowedAsset(a)&&a.name.includes('aarch64')&&a.name.endsWith('.dmg'))&&r.assets.some(a=>allowedAsset(a)&&a.name.includes('x64')&&a.name.endsWith('.dmg'))&&r.assets.some(a=>allowedAsset(a)&&a.name.endsWith('.exe')));
-    if(!release)throw Error();
-    if(active){const version=release.tag_name.match(/^desktop-v(\d+)\.(\d+)\.(\d+)(?:-|$)/)?.slice(1).map(Number);const verified=!!version&&(version[0]>0||version[1]>2||version[1]===2&&version[2]>=2);setMacVerified(verified);setAssets(release.assets.filter(allowedAsset));setMessage(verified?'Choose your computer below. '+release.tag_name.replace('desktop-v','Version ').replace(/-[a-f0-9]+$/,'')+' · Beta':'Windows beta is available. Corrected Mac installers are being verified.');}
+    // A verified release for one platform must remain available if another is delayed.
+    const published=rows.filter(r=>r.tag_name.startsWith('desktop-v')&&!r.draft);
+    const macRelease=published.find(r=>{
+     const version=r.tag_name.match(/^desktop-v(\d+)\.(\d+)\.(\d+)(?:-|$)/)?.slice(1).map(Number);
+     return !!version&&(version[0]>0||version[1]>2||version[1]===2&&version[2]>=2)&&r.assets.some(a=>allowedAsset(a)&&a.name.includes('aarch64')&&a.name.endsWith('.dmg'))&&r.assets.some(a=>allowedAsset(a)&&a.name.includes('x64')&&a.name.endsWith('.dmg'));
+    });
+    const windowsRelease=published.find(r=>r.assets.some(a=>allowedAsset(a)&&a.name.endsWith('.exe')));
+    if(!macRelease&&!windowsRelease)throw Error();
+    if(active){setMacVerified(!!macRelease);setAssets([...(macRelease?.assets.filter(a=>allowedAsset(a)&&a.name.endsWith('.dmg'))||[]),...(windowsRelease?.assets.filter(a=>allowedAsset(a)&&a.name.endsWith('.exe'))||[])]);setMessage(macRelease?'Choose your computer below. Mac version '+macRelease.tag_name.replace('desktop-v','').replace(/-[a-f0-9]+$/,'')+' · Beta':'Windows beta is available. Corrected Mac installers are being verified.');}
    }).catch(()=>{if(active){setFailed(true);setMessage('We couldn’t check installers. Try again or download from GitHub releases.')}})
    .finally(()=>clearTimeout(timer));
   return()=>{active=false;clearTimeout(timer);c.abort()};
