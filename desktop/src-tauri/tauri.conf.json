@@ -1,6 +1,6 @@
 {
  "$schema":"https://schema.tauri.app/config/2",
- "productName":"Bndrm","version":"0.2.0","identifier":"app.bndrm.desktop",
+ "productName":"Bndrm","version":"0.2.1","identifier":"app.bndrm.desktop",
  "build":{"frontendDist":"../frontend"},
  "app":{"withGlobalTauri":true,"windows":[{"label":"main","title":"Bndrm Desktop","width":780,"height":820,"minWidth":520,"minHeight":650,"dragDropEnabled":false}],"security":{"csp":"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src ipc: http://ipc.localhost; object-src 'none'; base-uri 'self'; frame-src 'none'","capabilities":["local-controller"]}},
  "bundle":{"active":true,"targets":["dmg","nsis"],"resources":["runtime/**/*"],"icon":["icons/icon.png","icons/icon.icns","icons/icon.ico"],"macOS":{"minimumSystemVersion":"14.0"},"windows":{"nsis":{"installMode":"currentUser"}}}

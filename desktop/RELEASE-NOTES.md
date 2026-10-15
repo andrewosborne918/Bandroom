@@ -1,3 +1,5 @@
+Bndrm Desktop 0.2.1 beta introduces the Soft Daylight design: warm cream surfaces, forest green controls and the supplied Bndrm monogram, including native app icons. Download the matching installer from https://bndrm.vercel.app/desktop.
+
 Bndrm Desktop beta for Apple silicon Macs, Intel Macs and Windows 64-bit PCs.
 
 Install the matching DMG or Windows installer, open Bndrm, click Connect your band, sign in, select the intended band and approve the displayed code. Open Library & Session and drop a song into the library. Keep Bndrm Desktop running while it processes. Band members use https://bndrm.vercel.app on phones and tablets.
