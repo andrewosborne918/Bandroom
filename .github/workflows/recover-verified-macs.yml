@@ -46,8 +46,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag='desktop-v0.2.2-39dd846'
+          tag="desktop-v0.2.2-mac-${GITHUB_SHA:0:7}"
           if gh release view "$tag" >/dev/null 2>&1; then exit 0; fi
           mapfile -t files < <(find verified-mac-installers -type f -name 'Bndrm_0.2.2_*.dmg')
           test "${#files[@]}" -eq 2
-          gh release create "$tag" "${files[@]}" --target 39dd846737d2856dad4c1ed6cfcb62a2d65b0f74 --prerelease --title 'Bndrm Desktop 0.2.2 beta - Mac signing fix' --notes-file desktop/RELEASE-NOTES.md
+          printf '\nMac binaries were built and passed installed-DMG verification in run 38778821531 from commit 39dd846737d2856dad4c1ed6cfcb62a2d65b0f74. This recovery release republishes those exact verified artifacts; Windows is released separately.\n' >> desktop/RELEASE-NOTES.md
+          gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" --prerelease --title 'Bndrm Desktop 0.2.2 beta - Mac signing fix' --notes-file desktop/RELEASE-NOTES.md

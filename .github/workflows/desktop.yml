@@ -1,3 +1,4 @@
+# Mac artifacts can also be published independently after final-DMG verification.
 name: Bndrm desktop installers
 on:
   push:
