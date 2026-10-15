@@ -2,20 +2,20 @@
 import json,os,pathlib,runpy,signal,sys
 
 def main():
+    configure_binaries()
     if len(sys.argv)>1 and sys.argv[1] in ('--demucs','--analyze'):
         module='demucs' if sys.argv[1]=='--demucs' else 'analyze'
         sys.argv=[module,*sys.argv[2:]]
         runpy.run_module(module,run_name='__main__');return
     if len(sys.argv)>1 and sys.argv[1]=='--self-test':
         import torch,torchaudio,librosa,whisper,soundfile,subprocess
-        configure_binaries()
         for binary in ('ffmpeg','ffprobe'):subprocess.check_call([binary,'-version'],stdout=subprocess.DEVNULL)
         import demucs.separate,analyze
         print(json.dumps({'stage':'idle','message':'Bundled Python, Demucs, Whisper and FFmpeg passed startup checks.'}),flush=True);return
     config=json.loads(sys.stdin.readline())
     if config.get('url')!='https://bndrm.vercel.app' or len(config.get('secret',''))!=64:raise ValueError('Invalid desktop connection')
     os.environ.update(BANDROOM_URL=config['url'],WORKER_SECRET=config['secret'],BANDROOM_CACHE=config['cache'],TORCH_HOME=str(pathlib.Path(config['models'])/'torch'),XDG_CACHE_HOME=config['models'],NUMBA_CACHE_DIR=str(pathlib.Path(config['models'])/'numba'),OMP_NUM_THREADS=str(max(1,min(4,os.cpu_count() or 1))))
-    os.environ.pop('SITES_SERVICE_TOKEN',None);configure_binaries()
+    os.environ.pop('SITES_SERVICE_TOKEN',None)
     from cloud_worker import PublicWorker
     class DesktopWorker(PublicWorker):
         def set_progress(self,stage,percent=None,eta=None):
