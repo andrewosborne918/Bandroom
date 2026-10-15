@@ -8,7 +8,7 @@ permissions:
   contents: read
 concurrency:
   group: desktop-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   build:
     strategy:
@@ -39,6 +39,8 @@ jobs:
         with:
           python-version: '3.11'
           architecture: ${{ matrix.arch }}
+          cache: pip
+          cache-dependency-path: desktop/requirements-build.txt
       - name: Set up Windows compiler
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756
@@ -46,6 +48,14 @@ jobs:
         run: rustup toolchain install 1.90.0 --profile minimal
       - name: Select Rust toolchain
         run: rustup default 1.90.0
+      - name: Cache native build dependencies
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            desktop/src-tauri/target
+          key: bndrm-rust-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('desktop/src-tauri/Cargo.lock') }}
       - name: Install desktop build tools
         working-directory: desktop
         run: npm ci
@@ -113,6 +123,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          current="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+          if [ "$current" != "$GITHUB_SHA" ]; then
+            echo 'A newer build supersedes this release.'
+            exit 0
+          fi
           tag="desktop-v0.2.0-${GITHUB_SHA:0:7}"
           mapfile -t files < <(find installers -type f \( -name '*.dmg' -o -name '*.exe' \))
           gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" --prerelease --title "Bndrm Desktop 0.2 beta" --notes-file desktop/RELEASE-NOTES.md
