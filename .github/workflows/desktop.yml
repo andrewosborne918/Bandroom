@@ -29,6 +29,8 @@ jobs:
             bundle: nsis
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '14.0'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -40,9 +42,33 @@ jobs:
       - name: Set up Windows compiler
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756
-      - name: Install Windows make
+      - name: Set up Rust
+        run: rustup toolchain install 1.90.0 --profile minimal
+      - name: Select Rust toolchain
+        run: rustup default 1.90.0
+      - name: Install desktop build tools
+        working-directory: desktop
+        run: npm ci
+      - name: Create app icons
+        run: |
+          python -m pip install pillow==11.3.0
+          python desktop/scripts/make_icons.py
+      - name: Prepare native compilation
+        run: python -c "from pathlib import Path; p=Path('desktop/src-tauri/runtime'); p.mkdir(exist_ok=True); (p/'compile-check.txt').write_text('Audio runtime is built after native compilation succeeds.')"
+      - name: Compile desktop shell first
+        run: cargo build --release --locked --features tauri/custom-protocol --target ${{ matrix.target }} --manifest-path desktop/src-tauri/Cargo.toml
+      - name: Set up POSIX build tools on Windows
+        id: msys
         if: runner.os == 'Windows'
-        run: choco install make --version=4.4.1 -y --no-progress
+        uses: msys2/setup-msys2@40677d36a502eb2cf0fb808cc9dec31bf6152638
+        with:
+          msystem: MSYS
+          path-type: inherit
+          install: make diffutils pkgconf
+      - name: Select Windows build shell
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: echo "BNDRM_BUILD_BASH=${{ steps.msys.outputs.msys2-location }}\usr\bin\bash.exe" >> $env:GITHUB_ENV
       - name: Build minimal FFmpeg
         run: python desktop/scripts/build_ffmpeg.py
       - name: Install CPU PyTorch on Windows
@@ -58,15 +84,6 @@ jobs:
       - name: Test actual frozen audio inference on Windows
         if: runner.os == 'Windows'
         run: python desktop/scripts/smoke_test.py desktop/src-tauri/runtime/bndrm-processor/bndrm-processor.exe
-      - name: Create app icons
-        run: python desktop/scripts/make_icons.py
-      - name: Set up Rust
-        run: rustup toolchain install 1.90.0 --profile minimal
-      - name: Select Rust toolchain
-        run: rustup default 1.90.0
-      - name: Install desktop build tools
-        working-directory: desktop
-        run: npm ci
       - name: Build installer
         working-directory: desktop
         run: npm run build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundle }} -- --locked

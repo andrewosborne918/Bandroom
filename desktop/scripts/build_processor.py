@@ -3,6 +3,7 @@ import os,pathlib,shutil,subprocess,sys
 repo=pathlib.Path(__file__).resolve().parents[2]
 worker=repo/'worker';desktop=repo/'desktop';runtime=desktop/'src-tauri'/'runtime'
 ffmpeg=desktop/'build'/'ffmpeg-bin'
+(runtime/'compile-check.txt').unlink(missing_ok=True)
 args=[sys.executable,'-m','PyInstaller','--noconfirm','--clean','--onedir','--name','bndrm-processor','--distpath',str(runtime),'--workpath',str(desktop/'build'),'--specpath',str(desktop/'build'),'--paths',str(worker)]
 for module in ('demucs','whisper','librosa','soundfile','torchaudio','numba','llvmlite','requests'):
  args+=['--collect-all',module]
