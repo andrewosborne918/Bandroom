@@ -45,6 +45,10 @@ def main():
 
 def configure_binaries():
     if getattr(sys,'frozen',False):
+        import certifi
+        trust=os.environ.get('SSL_CERT_FILE','')
+        if not trust or not pathlib.Path(trust).is_file():os.environ['SSL_CERT_FILE']=certifi.where()
+        os.environ.setdefault('REQUESTS_CA_BUNDLE',os.environ['SSL_CERT_FILE'])
         bundled=pathlib.Path(sys._MEIPASS)/'ffmpeg'
         os.environ['PATH']=str(bundled)+os.pathsep+os.environ.get('PATH','')
 

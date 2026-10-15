@@ -5,7 +5,7 @@ worker=repo/'worker';desktop=repo/'desktop';runtime=desktop/'src-tauri'/'runtime
 ffmpeg=desktop/'build'/'ffmpeg-bin'
 (runtime/'compile-check.txt').unlink(missing_ok=True)
 args=[sys.executable,'-m','PyInstaller','--noconfirm','--clean','--onedir','--name','bndrm-processor','--distpath',str(runtime),'--workpath',str(desktop/'build'),'--specpath',str(desktop/'build'),'--paths',str(worker)]
-for module in ('demucs','whisper','librosa','soundfile','torchaudio','numba','llvmlite','requests'):
+for module in ('demucs','whisper','librosa','soundfile','torchaudio','numba','llvmlite','requests','certifi'):
  args+=['--collect-all',module]
 args+=['--collect-submodules','torch','--hidden-import','analyze','--hidden-import','cloud_worker','--hidden-import','worker']
 for name in ('ffmpeg','ffprobe'):
