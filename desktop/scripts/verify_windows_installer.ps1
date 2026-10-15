@@ -14,9 +14,10 @@ try {
     if (!(Test-Path -LiteralPath $controller)) { throw 'Installed controller is missing' }
     $processor = @(Get-ChildItem -LiteralPath $installRoot -Filter 'bndrm-processor.exe' -File -Recurse)
     if ($processor.Count -ne 1) { throw 'Expected exactly one installed audio processor' }
-    & $processor[0].FullName --self-test
+    $processorPath = $processor[0].FullName
+    & $processorPath --self-test
     if ($LASTEXITCODE -ne 0) { throw 'Installed processor self-test failed' }
-    & python desktop/scripts/smoke_test.py $processor[0].FullName
+    & python desktop/scripts/smoke_test.py $processorPath
     if ($LASTEXITCODE -ne 0) { throw 'Installed audio inference failed' }
     $app = Start-Process -FilePath $controller -PassThru
     try {
