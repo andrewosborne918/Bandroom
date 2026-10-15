@@ -1,3 +1,5 @@
+The website temporarily pauses earlier Mac installer downloads until this verified release is published.
+
 Bndrm Desktop 0.2.2 beta fixes the Mac app bundle signature. Both Mac installers are checked after mounting the final disk image and copying the app to a fresh folder. This includes strict code-signature verification, controller startup, and audio-processor inference from the installed bundle.
 
 The Mac beta uses an ad-hoc signature, not an Apple Developer ID certificate or Apple notarization. macOS may require approval in System Settings > Privacy & Security. This release does not disable Gatekeeper or remove quarantine.
