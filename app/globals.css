@@ -45,3 +45,6 @@ body{line-height:1.5}h1,h2,h3{color:#1E4D3A}input,select,textarea{accent-color:#
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
 
 .platform-bar~.app .sidebar{top:130px}.beats i.active.downbeat{background:#163A2C}
+
+/* Workspace controls must stay above an open song editor. */
+.platform-backdrop{z-index:80}
