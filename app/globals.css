@@ -48,3 +48,5 @@ body{line-height:1.5}h1,h2,h3{color:#1E4D3A}input,select,textarea{accent-color:#
 
 /* Workspace controls must stay above an open song editor. */
 .platform-backdrop{z-index:80}
+
+.processing-status .processing-step{font-size:12px;line-height:1.6;margin:0 0 10px;overflow-wrap:anywhere}

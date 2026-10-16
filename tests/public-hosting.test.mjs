@@ -42,3 +42,31 @@ test('uploaded R2 stems are verified with HEAD matching the signed method, witho
  assert.deepEqual(await r2ObjectInfo(config,'stems/bands/band-a/drums.wav'),{size:60000000,etag:'verified-stem'});
  assert.equal(calls,1);
 });
+
+import {safeProgress,mergeProgress,overallProgress,overallRemaining} from '../lib/job-progress.ts';
+test('overall progress advances through phases and four uploads without resetting on retries or reloads',()=>{
+ const start=1_000_000;
+ const update=(previous,stage,percent,now)=>mergeProgress(previous,safeProgress({stage,percent,startedAt:start},now));
+ let p=update(undefined,'downloading',100,start+5000);assert.equal(p.overallPercent,5);
+ p=update(p,'separating',100,start+60000);assert.equal(p.overallPercent,50);
+ p=update(p,'lyrics',undefined,start+62000);assert.equal(p.overallPercent,50);
+ p=update(p,'beats',100,start+80000);assert.equal(p.overallPercent,80);
+ for(const percent of [0,25,50,75,100]){const old=p.overallPercent;p=update(p,'uploading',percent,start+90000+percent*1000);assert.ok(p.overallPercent>=old)}
+ assert.equal(p.overallPercent,98);p=update(p,'saving',undefined,start+200000);
+ const reloaded=JSON.parse(JSON.stringify(p));
+ p=mergeProgress(reloaded,safeProgress({stage:'uploading',percent:0,startedAt:start+210000},start+210000));
+ assert.equal(p.overallPercent,98);assert.equal(p.overallStartedAt,start);assert.equal(p.recovering,true);
+ assert.equal(overallRemaining(p,start+210000),undefined);
+ p=update(p,'saving',100,start+220000);assert.equal(p.overallPercent,99);
+ const newAttempt=update(undefined,'downloading',0,start+230000);assert.equal(newAttempt.overallPercent,0);
+});
+test('overall ETA needs observed processing, excludes idle or stale updates and ignores client overall claims',()=>{
+ const start=1_000_000,now=start+60000;
+ const incoming=safeProgress({stage:'separating',percent:50,startedAt:start,overallPercent:100,overallStartedAt:0},now);
+ assert.equal(incoming.overallPercent,undefined);
+ const p=mergeProgress(undefined,incoming);
+ assert.equal(overallProgress(p),27.5);assert.ok(overallRemaining(p,now)>0);
+ assert.equal(overallRemaining(p,now+21000),undefined);
+ assert.equal(overallRemaining({...p,connectionLost:true},now),undefined);
+ assert.equal(overallRemaining({...p,updatedAt:start+5000},start+5000),undefined);
+});

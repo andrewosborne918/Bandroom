@@ -1,6 +1,6 @@
 import {lookupLyrics} from './chart-api.ts';
 import {applyChart} from './song-charts.ts';
-import {safeProgress} from './job-progress.ts';
+import {safeProgress,mergeProgress} from './job-progress.ts';
 import {safeAnalysis,applyAnalysis} from './analysis.ts';
 import {streamZip} from './zip-stream.ts';
 import type {Song,Stem} from './types';
@@ -56,7 +56,7 @@ export async function separationApi(req:Request,bucket:R2Bucket,env:ProcessingCo
  if(!song.chart){try{const found=await lookupLyrics(song);if(found.chart){const next=applyChart(song,found.chart);const saved=await bucket.put(base+'songs/'+song.id+'.json',JSON.stringify(next),{onlyIf:{etagMatches:obj!.etag}});if(saved)song=next}}catch{}}
  return json({found:!!song.chart?.plainLyrics,lyrics:song.chart?.timedLyrics||[],source:song.chart?.source});
  }
- if(worker&&p[2]==='progress'&&method==='POST'){if(job.status!=='processing')error('Job is not processing',409);const raw:any=await req.json();const progress=safeProgress(raw);if(!progress)error('Invalid progress');await bucket.put('processing/progress/'+job.id+'.json',JSON.stringify({lease:job.lease,progress}));return json({ok:true})}
+ if(worker&&p[2]==='progress'&&method==='POST'){if(job.status!=='processing')error('Job is not processing',409);const raw:any=await req.json();const progress=safeProgress(raw);if(!progress)error('Invalid progress');const old=await bucket.get('processing/progress/'+job.id+'.json');const prior:any=old?await old.json():null;await bucket.put('processing/progress/'+job.id+'.json',JSON.stringify({lease:job.lease,progress:mergeProgress(prior?.lease===job.lease?prior.progress:undefined,progress!)}));return json({ok:true})}
  if(p[2]==='original'&&method==='GET'){const f=await bucket.get(base+'originals/'+job.id);if(!f)error('Original unavailable',404);return new Response(f!.body as any,{headers:{'Content-Type':f!.httpMetadata?.contentType||'audio/wav','Cache-Control':'private, no-store'}});}
  if(worker&&p[2]==='result'&&method==='PUT'){
  const cat=url.searchParams.get('category')||'';if(!['vocals','drums','bass','other'].includes(cat))error('Invalid model stem');const stid=job.id+'-'+cat;const upload=await audioStream(req,Math.ceil(limits(env).seconds*44100*8+1024*1024));
