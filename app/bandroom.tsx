@@ -77,7 +77,7 @@ export default function Bndrm({cloud=false,canEdit=true,cacheScope=''}:{cloud?:b
   },[]);
   useEffect(()=>{localStorage.setItem('bandroom-preferences',JSON.stringify({name,instrument,adjustment,fontSize,leaderTracks}));},[name,instrument,adjustment,fontSize,leaderTracks]);
   useEffect(()=>{if(!setlistLoaded||!canEdit)return;const timer=setTimeout(()=>{void api('setlist','PUT',{ids:setlist}).catch(e=>notify(e.message));},500);return()=>clearTimeout(timer);},[setlist,setlistLoaded]);
-  useEffect(()=>{let alive=true,inFlight=false;const refresh=async()=>{if(inFlight||credential.current||document.hidden)return;inFlight=true;try{const result=await api('songs');if(alive){const incoming=result.songs.filter((s:Song)=>!stockDemo(s));setSongs(previous=>JSON.stringify(previous)===JSON.stringify(incoming)?previous:incoming);}}catch{}finally{inFlight=false;}};const timer=setInterval(()=>void refresh(),5000);return()=>{alive=false;clearInterval(timer)};},[]);
+  useEffect(()=>{let alive=true,inFlight=false;const refresh=async()=>{if(inFlight||credential.current||document.hidden&&!(cloud&&uploadedSongs(cacheScope).length))return;inFlight=true;try{const result=await api('songs');if(alive){const incoming=result.songs.filter((s:Song)=>!stockDemo(s));setSongs(previous=>JSON.stringify(previous)===JSON.stringify(incoming)?previous:incoming);}}catch{}finally{inFlight=false;}};const timer=setInterval(()=>void refresh(),5000);return()=>{alive=false;clearInterval(timer)};},[]);
   useEffect(()=>{songRef.current=song||null;transportRef.current=transport;},[song,transport]);
   useEffect(()=>{
     if(!cred)return;let alive=true,inFlight=false,failures=0;
@@ -101,13 +101,13 @@ export default function Bndrm({cloud=false,canEdit=true,cacheScope=''}:{cloud?:b
         }
         if(!alive)return;
         const memory=[...e.buffers.values()].reduce((n,buffer)=>n+buffer.length*buffer.numberOfChannels*4,0);if(memory>deviceAudioBudget())throw Error('This song needs more audio memory. Use a computer or import mono stems.');
-        done++;setAudioPreparation({done,total:required.length,error:''});
+        done++;setAudioPreparation(previous=>({...previous,done,total:required.length}));
       },2);
       if(alive)setLoaded(true);
     };
     const promise=load();preparation.current={songId:song.id,promise};void promise.catch(error=>{if(alive){setAudioPreparation(p=>({...p,error:error.message}));notify(error.message)}});return()=>{alive=false};
   },[song?.id,audience,audioManifest,cred?.code,cred?.token,cloud,audioRetry]);
-  useEffect(()=>{const change=()=>setCacheRevision(n=>n+1);window.addEventListener('bndrm-cache-uploads',change);return()=>window.removeEventListener('bndrm-cache-uploads',change)},[]);
+  useEffect(()=>{const change=()=>setCacheRevision(n=>n+1);window.addEventListener('bndrm-cache-uploads',change);window.addEventListener('online',change);return()=>{window.removeEventListener('bndrm-cache-uploads',change);window.removeEventListener('online',change)}},[]);
   const libraryAudio=JSON.stringify(songs.map(s=>[s.id,s.stems.map(st=>[st.id,st.bytes,st.audioVersion])]));
   useEffect(()=>{
     if(!cloud||!cacheScope)return;let alive=true;
