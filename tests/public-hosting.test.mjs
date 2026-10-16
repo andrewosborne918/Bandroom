@@ -117,3 +117,13 @@ test('cached playback performs authorization but skips the full audio transfer',
  const stem={id:'stem',name:'Drums',bytes:4};await (await authorizePrivateAudio('song',stem)).load();await (await authorizePrivateAudio('song',stem)).load();
  assert.equal(authorization,2);assert.equal(downloads,1);
 });
+
+
+test('worker duration accepts fractional verified audio without broadening upload quotas',async()=>{
+ const {workerDurationLimit}=await import('../lib/worker-duration.ts');
+ const limit=workerDurationLimit(136,136.008);
+ assert.equal(limit,137);assert.ok(136.008<=limit);assert.ok(138>limit);
+ assert.equal(workerDurationLimit(136,136),137);
+ assert.equal(workerDurationLimit(327,327.6),328);
+ assert.equal(workerDurationLimit(600,600),601);
+});
