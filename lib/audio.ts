@@ -6,7 +6,7 @@ export class BandAudio {
   context: AudioContext | null=null;
   buffers=new Map<string,AudioBuffer>();
   bufferKeys=new Map<string,string>();
-  async loadStem(songId:string,stem:import('./types').Stem,loader:()=>Promise<ArrayBuffer>,retain:()=>boolean=()=>true){const key=audioCacheKey(songId,stem);if(this.bufferKeys.get(stem.id)===key&&this.buffers.has(stem.id))return this.buffers.get(stem.id)!;const buffer=await decodedAudioCache.load(key,async()=>this.decode(await loader()),deviceAudioBudget());if(retain()){this.buffers.set(stem.id,buffer);this.bufferKeys.set(stem.id,key)}return buffer;}
+  async loadStem(songId:string,stem:import('./types').Stem,loader:()=>Promise<ArrayBuffer>,retain:()=>boolean=()=>true,background=false){const key=audioCacheKey(songId,stem);if(this.bufferKeys.get(stem.id)===key&&this.buffers.has(stem.id))return this.buffers.get(stem.id)!;const buffer=await decodedAudioCache.load(key,async()=>this.decode(await loader(),!background),deviceAudioBudget());if(retain()){this.buffers.set(stem.id,buffer);this.bufferKeys.set(stem.id,key)}return buffer;}
   hasStem(songId:string,stem:import('./types').Stem){return this.buffers.has(stem.id)&&this.bufferKeys.get(stem.id)===audioCacheKey(songId,stem);}
   sources:AudioBufferSourceNode[]=[];
   clicks=new Set<OscillatorNode>();
@@ -20,7 +20,7 @@ export class BandAudio {
   async arm(){ if(!this.context) this.context=new AudioContext({latencyHint:'interactive'}); await this.context.resume(); }
   get ready(){return this.context?.state==='running';}
   get latency(){return this.context?.outputLatency||this.context?.baseLatency||0;}
-  async decode(data:ArrayBuffer){ await this.arm();return await this.context!.decodeAudioData(data); }
+  async decode(data:ArrayBuffer,activate=true){ if(activate)await this.arm();else if(!this.context)this.context=new AudioContext({latencyHint:'interactive'});return await this.context!.decodeAudioData(data); }
   stop(){this.clicks.forEach(o=>{try{o.stop();}catch{}});this.clicks.clear();this.sources.forEach(s=>{try{s.stop();}catch{}});this.sources=[];this.gains.clear();this.pans.clear();if(this.timer)clearInterval(this.timer);this.timer=null;this.run='';this.transport=null;}
   output(node:AudioNode,click=false){
     if(this.audience&&click)return;

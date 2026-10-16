@@ -265,3 +265,14 @@ test('mix changes and cue monitoring retain decoded buffers and scheduled source
  a.stems=true;a.now=()=>1000;const song={...base,stems:[{...stem,category:'spoken cues'}]};a.cues=false;a.start(song,{status:'playing',run:'unchanged',startAt:2000,offset:0,countIn:0});const source=a.sources[0];assert.equal(a.gains.get(stem.id).gain.value,0);a.cues=true;a.mix(song);assert.equal(a.gains.get(stem.id).gain.target,.7);assert.equal(a.sources[0],source);a.stop();
  const cancelled=new BandAudio();cancelled.decode=async()=>buffer;await cancelled.loadStem('other',stem,loader,()=>false);assert.equal(cancelled.buffers.size,0);
 });
+
+test('background decoding prepares audio without resuming playback; enabling audio remains a gesture',async()=>{
+ const previous=globalThis.AudioContext;let resumes=0,decodes=0;
+ globalThis.AudioContext=class{state='suspended';async resume(){resumes++;this.state='running'}async decodeAudioData(){decodes++;return {length:10,numberOfChannels:1,duration:1}}};
+ try{const audio=new BandAudio();await audio.decode(new ArrayBuffer(4),false);assert.equal(decodes,1);assert.equal(resumes,0);assert.equal(audio.ready,false);await audio.arm();assert.equal(resumes,1);assert.equal(audio.ready,true)}finally{if(previous)globalThis.AudioContext=previous;else delete globalThis.AudioContext}
+});
+
+test('clearing decoded audio during sign-out does not repopulate memory from an older pending load',async()=>{
+ const {DecodedAudioCache}=await import('../lib/audio-cache.ts');const cache=new DecodedAudioCache();let release;
+ const pending=cache.load('private',()=>new Promise(resolve=>release=resolve),1000);cache.clear();release({length:10,numberOfChannels:1});await pending;assert.equal(cache.entries.size,0);assert.equal(cache.bytes,0);
+});

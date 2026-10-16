@@ -70,3 +70,50 @@ test('overall ETA needs observed processing, excludes idle or stale updates and 
  assert.equal(overallRemaining({...p,connectionLost:true},now),undefined);
  assert.equal(overallRemaining({...p,updatedAt:start+5000},start+5000),undefined);
 });
+
+import {DeviceAudioCache,assetCacheKey,deviceAudioCache,mapAudio} from '../lib/device-audio-cache.ts';
+import {authorizePrivateAudio} from '../lib/private-audio.ts';
+class LocalAudioStore{
+ entries=new Map();
+ async match(request){const row=this.entries.get(request.url);return row?new Response(row.data.slice(0),{headers:row.headers}):undefined}
+ async put(request,response){this.entries.set(request.url,{data:await response.arrayBuffer(),headers:Object.fromEntries(response.headers)})}
+ async delete(request){return this.entries.delete(request.url)}
+ async keys(){return [...this.entries.keys()].map(url=>new Request(url))}
+}
+test('uploaded files persist across cache instances, reuse local bytes, and isolate users, bands and file versions',async()=>{
+ const store=new LocalAudioStore(),first=new DeviceAudioCache(async()=>store,()=>100),key=assetCacheKey('band-a:user-a','stem-a',4);
+ assert.equal(await first.put(key,new Blob(['WAVE']),4),true);
+ const reopened=new DeviceAudioCache(async()=>store,()=>100);let downloads=0;const loader=async()=>{downloads++;return new TextEncoder().encode('WAVE').buffer};
+ assert.equal(new TextDecoder().decode(await reopened.load(key,4,loader)),'WAVE');assert.equal(downloads,0);
+ await reopened.load(assetCacheKey('band-a:user-b','stem-a',4),4,loader);
+ await reopened.load(assetCacheKey('band-b:user-a','stem-a',4),4,loader);
+ await reopened.load(assetCacheKey('band-a:user-a','replacement',4),4,loader);assert.equal(downloads,3);
+});
+test('device cache bounds disk use, deduplicates downloads, retries failures and tolerates unavailable storage',async()=>{
+ const store=new LocalAudioStore(),cache=new DeviceAudioCache(async()=>store,()=>8);
+ await cache.put('old',new ArrayBuffer(6),6);await cache.put('new',new ArrayBuffer(6),6);assert.equal(await cache.has('old'),false);assert.equal(await cache.has('new'),true);
+ assert.equal(await cache.put('oversize',new ArrayBuffer(20),20),false);
+ let release;const loader=()=>new Promise(resolve=>release=resolve);const one=cache.load('pending',4,loader),two=cache.load('pending',4,loader);
+ await new Promise(r=>setTimeout(r,0));release(new ArrayBuffer(4));assert.equal(await one,await two);
+ await assert.rejects(cache.load('failure',4,async()=>{throw Error('offline')}));await cache.load('failure',4,async()=>new ArrayBuffer(4));
+ const unsupported=new DeviceAudioCache(async()=>{throw Error('blocked')},()=>8);assert.equal((await unsupported.load('x',4,async()=>new ArrayBuffer(4))).byteLength,4);
+});
+test('clearing private cache prevents an in-flight download from restoring signed-out audio',async()=>{
+ const store=new LocalAudioStore(),cache=new DeviceAudioCache(async()=>store,()=>100);let release;
+ const pending=cache.load('private',4,()=>new Promise(resolve=>release=resolve));await new Promise(r=>setTimeout(r,0));await cache.clear();release(new ArrayBuffer(4));await pending;assert.equal(await cache.has('private'),false);
+});
+test('persistent audio requires fresh authorization and never reads a revoked or audience-restricted asset',async t=>{
+ let calls=0;t.mock.method(globalThis,'fetch',async(url,options)=>{calls++;assert.match(url,/authorize=1/);assert.match(url,/session=BAND/);assert.equal(options.headers['x-band-token'],'audience-device');return new Response('{}',{status:403})});
+ await assert.rejects(authorizePrivateAudio('song',{id:'click',bytes:4},{code:'BAND',token:'audience-device'}),/access ended/);assert.equal(calls,1);
+});
+test('background preparation uses a bounded number of concurrent files',async()=>{
+ let active=0,max=0,completed=0;await mapAudio([1,2,3,4,5],async()=>{active++;max=Math.max(max,active);await new Promise(r=>setTimeout(r,1));active--;completed++},2);assert.equal(completed,5);assert.equal(max,2);
+});
+
+test('cached playback performs authorization but skips the full audio transfer',async t=>{
+ const store=new LocalAudioStore(),old=globalThis.caches;globalThis.caches={open:async()=>store};let authorization=0,downloads=0;
+ t.after(async()=>{await deviceAudioCache.clear();if(old)globalThis.caches=old;else delete globalThis.caches});
+ t.mock.method(globalThis,'fetch',async(url,options)=>{if(url.includes('authorize=1')){authorization++;return Response.json({cacheScope:'band:user',assetId:'stem',bytes:4,downloadUrl:'https://audio.example/stem.wav'})}downloads++;assert.equal(options.credentials,'omit');assert.equal(options.headers,undefined);return new Response('WAVE')});
+ const stem={id:'stem',name:'Drums',bytes:4};await (await authorizePrivateAudio('song',stem)).load();await (await authorizePrivateAudio('song',stem)).load();
+ assert.equal(authorization,2);assert.equal(downloads,1);
+});
