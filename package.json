@@ -8,19 +8,20 @@
   "scripts": {
     "install:ci": "bash scripts/install-pnpm.sh",
     "dev": "next dev",
-    "build": "next build --webpack",
+    "build": "node scripts/sync-audio-worklet.mjs && next build --webpack",
     "start": "next start",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
-    "build:vercel": "next build --webpack",
+    "build:vercel": "node scripts/sync-audio-worklet.mjs && next build --webpack",
     "start:vercel": "next start",
-    "test": "node --test tests/core.test.mjs tests/platform-db.test.mjs tests/recognition.test.mjs tests/import-info.test.mjs tests/public-hosting.test.mjs tests/desktop-db.test.mjs",
+    "test": "node --test tests/core.test.mjs tests/platform-db.test.mjs tests/recognition.test.mjs tests/import-info.test.mjs tests/public-hosting.test.mjs tests/desktop-db.test.mjs tests/rehearsal.test.mjs",
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
     "@hookform/resolvers": "^5.7.1",
     "@shadcn/react": "^0.3.0",
+    "@soundtouchjs/audio-worklet": "2.1.1",
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.117.2",
     "class-variance-authority": "0.7.1",
