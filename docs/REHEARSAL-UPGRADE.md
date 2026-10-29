@@ -24,11 +24,11 @@
 
 ## Release dependency and approval
 
-The new app requires `supabase/migrations/20261029141110_rehearsal_upgrade.sql` (or the actual migration version recorded by Supabase when it is applied). Apply the reviewed migration before deploying this app. Do not merge/deploy the upgrade against an unmigrated production database.
+The new app requires `supabase/migrations/20261029144317_rehearsal_upgrade.sql` (or the actual migration version recorded by Supabase when it is applied). Apply the reviewed migration before deploying this app. Do not merge/deploy the upgrade against an unmigrated production database.
 
 The migration removes the old uniqueness constraint that limited each band to one default and one non-default set, replacing it with a unique partial index for the default only. It adds set revisions, indexes, editor-scoped setlist mutation policies/column grants, invoker RPCs for set saves/catalog reads, and a private, checked request-limiter gateway. It preserves song/audio records. Direct setlist updates cannot reassign band ownership or toggle the default marker.
 
-Automatic approval review rejected applying this migration to production because it changes schema, a constraint and access permissions. No production migration was applied. Explicit user approval of this production migration is required before retrying it. Source changes remain reviewable independently.
+Automatic approval review initially required explicit approval for the production schema/permission change. The user approved the reviewed migration and release on 29 October 2026. The migration was then applied successfully as version 20261029144317; the repository filename matches the server migration history. Do not apply it again.
 
 After approval:
 
