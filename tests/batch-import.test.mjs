@@ -50,4 +50,23 @@ test('queue capacity stays bounded and rejected submissions do not reserve more 
 test('batch queue still enforces the monthly processing allowance',async()=>{
  const b=(await user(other,"select create_band('Limited band') id")).rows[0].id;await service('update entitlements set ai_monthly_seconds=2 where band_id=$1',[b]);await submit(await input(b,other),b,other);await assert.rejects(submit(await input(b,other),b,other),/allowance reached/);
 });
+test('storage reconciliation repairs drift while preserving live upload, job and export reservations',async()=>{
+ const b=(await user(other,"select create_band('Storage accounting') id")).rows[0].id;
+ const completedInput=await input(b,other),complete=await submit(completedInput,b,other);
+ // Completed jobs retain their estimate; it must not remain in reserved usage.
+ await service("update processing_jobs set status='completed' where id=$1",[complete]);
+ const queued=await submit(await input(b,other),b,other);
+ const pending=crypto.randomUUID();await user(other,"select reserve_upload($1,$2,$3,$4,'pending.mp3',1000,2,44100,'original')",[b,completedInput.song,pending,crypto.randomUUID()]);
+ const zip=(await user(other,'select * from request_export($1)',[complete])).rows[0];
+ const expected=Number((await service('select bytes from storage_reservations where asset_id=$1',[pending])).rows[0].bytes)+Number((await service('select output_reserved_bytes from processing_jobs where id=$1',[queued])).rows[0].output_reserved_bytes)+Number(zip.reserved_bytes);
+ await service('update band_usage set stored_bytes=999999,reserved_bytes=999999 where band_id=$1',[b]);
+ await assert.rejects(user(other,'select reconcile_usage($1)',[b]),/permission denied/);
+ await service('select reconcile_usage($1)',[b]);
+ let usage=(await service('select * from band_usage where band_id=$1',[b])).rows[0];assert.equal(Number(usage.stored_bytes),2000);assert.equal(Number(usage.reserved_bytes),expected);
+ await service("update export_jobs set status='completed',bytes=123,reserved_bytes=0 where id=$1",[zip.id]);
+ await service('select reconcile_usage($1)',[b]);await service('select reconcile_usage($1)',[b]);
+ usage=(await service('select * from band_usage where band_id=$1',[b])).rows[0];assert.equal(Number(usage.stored_bytes),2123);assert.equal(Number(usage.reserved_bytes),expected-Number(zip.reserved_bytes));
+ await user(other,'select cancel_separation($1)',[queued]);await service('select release_upload($1)',[pending]);await service('select reconcile_usage($1)',[b]);
+ assert.equal(Number((await service('select reserved_bytes from band_usage where band_id=$1',[b])).rows[0].reserved_bytes),0);
+});
 test.after(()=>db.close());
