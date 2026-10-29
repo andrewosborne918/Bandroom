@@ -208,7 +208,7 @@ export default function Bndrm({cloud=false,canEdit=true,cacheScope='',workspaceN
     if(deleteTarget?.id!==target.id)throw Error('Choose the song to delete first.');
     if(song?.id===target.id){engine.current?.stop();setLocalTransport({...stopped,run:crypto.randomUUID()});}
     await api('songs/'+target.id,'DELETE');
-    setSongs(prev=>prev.filter(s=>s.id!==target.id));setSetlist(prev=>prev.filter(id=>id!==target.id));
+    setSongs(prev=>prev.filter(s=>s.id!==target.id));setSetlist(prev=>prev.filter(id=>id!==target.id));setSets(prev=>prev.map(set=>({...set,ids:set.ids.filter(id=>id!==target.id)})));
     if(song?.id===target.id){setSelected(songs.find(s=>s.id!==target.id)?.id||'');setManualSection(null);setPosition(0);setLoaded(false);setArmed(false);}
     if(editor?.id===target.id){setEditor(null);setModal(null);setFiles([]);}
     setCatalog(prev=>prev.filter(s=>s.id!==target.id));setDeleteTarget(null);setModal(null);notify('Song deleted from your library and setlist.');
