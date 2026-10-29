@@ -1,0 +1,13 @@
+# Multiple-song imports
+
+The song picker accepts up to 20 recordings at once. Each recording becomes a separate library song. Uploads run sequentially to bound memory and bandwidth; each uploaded song is immediately queued on the server. A failed file does not stop the remaining files. The user can pause after the current file and retry failed imports within the same dialog without creating a second song record.
+
+Keep the browser/app open until uploads finish. Queued server jobs survive closing the page. A paired Bndrm Desktop processor must be running to separate/analyze recordings; otherwise they wait. Bulk uploads use embedded tags/filenames to prioritize upload speed, and the existing worker looks up lyrics and analyzes audio. Catalog identification remains available in each song editor. Single-song imports retain their catalog lookup.
+
+The Library shows active and waiting jobs plus recent finished/failed jobs. Editors can cancel queued work or retry failed processing. The backend allows at most 20 queued/running separation jobs per band, retains one running separation per band, and claims waiting songs in creation order. Expired leases recover the same running job before another separation starts. Existing worker installations use the unchanged protocol.
+
+Storage reservations, input duration/size limits, per-band monthly minutes, global processing caps, role checks and band privacy continue to apply. Queueing multiple songs reserves their output capacity immediately; a band's storage/minute allowance can therefore admit fewer than 20 songs. No new hosted compute or paid processing service is introduced.
+
+Migration: `supabase/migrations/20261029145910_batch_song_queue.sql` replaces the queued-or-running uniqueness index with running-only uniqueness, adjusts submit/retry queue checks, and serializes short worker claims. It changes no RLS policy or user grants and deletes no recordings/jobs. Apply it before releasing the batch UI; match the filename to the migration version recorded by Supabase. Older app/worker clients remain compatible.
+
+Verification: 82 tests pass, including sequential upload orchestration, continue-after-error, pause-after-current, durable multi-song admission, one-running-job enforcement across processors, expired-lease recovery, stale-lease rejection, retry accounting, the 20-job cap, monthly quotas and cross-band privacy. TypeScript and the production build pass. A browser fixture check selected three generated WAV files through the actual multi-file picker and verified three rows plus the Upload 3 songs action. An authenticated live multi-song separation still depends on a signed-in account, real uploads and a connected processor.
