@@ -1,0 +1,2 @@
+'use client';
+export default function ErrorBoundary({reset}:{error:Error&{digest?:string};reset:()=>void}){return <main className="platform-landing"><span className="eyebrow">BNDRM</span><h1>Let’s get you back to the music.</h1><p>This screen couldn’t finish loading. Try again to reconnect to your workspace.</p><button className="button primary" onClick={reset}>Try again</button><a className="button subtle" href="/">Open your library</a></main>}
