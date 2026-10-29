@@ -3,6 +3,13 @@ import assert from 'node:assert/strict';
 import {readFileSync,readdirSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 import {fileFingerprint,processImportBatch,MAX_BATCH_SONGS} from '../lib/import-batch.ts';
+import {formatStorage,storageUsage,FREE_STORAGE_BYTES} from '../lib/storage-usage.ts';
+test('storage displays include reservations, clamp remaining space and distinguish unlimited from zero',()=>{
+ assert.deepEqual(storageUsage(1024,2048,4096),{used:3072,remaining:1024,unlimited:false,percent:75});
+ assert.equal(storageUsage(5000,0,4096).remaining,0);assert.equal(storageUsage(1,0,0).percent,100);
+ assert.equal(storageUsage(5000,2000,null).unlimited,true);assert.equal(storageUsage(5000,2000,null).remaining,null);
+ assert.equal(formatStorage(FREE_STORAGE_BYTES),'2.00 GiB');
+});
 test('batch uploads run sequentially and a failed file does not prevent later uploads',async()=>{
  const completed=[],failed=[];let active=0,maximum=0;
  await processImportBatch([1,2,3],async n=>{active++;maximum=Math.max(maximum,active);try{await Promise.resolve();if(n===2)throw Error('Bad recording');completed.push(n)}finally{active--}},(n,e)=>failed.push([n,e.message]));
@@ -68,5 +75,30 @@ test('storage reconciliation repairs drift while preserving live upload, job and
  usage=(await service('select * from band_usage where band_id=$1',[b])).rows[0];assert.equal(Number(usage.stored_bytes),2123);assert.equal(Number(usage.reserved_bytes),expected-Number(zip.reserved_bytes));
  await user(other,'select cancel_separation($1)',[queued]);await service('select release_upload($1)',[pending]);await service('select reconcile_usage($1)',[b]);
  assert.equal(Number((await service('select reserved_bytes from band_usage where band_id=$1',[b])).rows[0].reserved_bytes),0);
+});
+test('unlimited storage is service-granted, follows owned bands and cannot leak through membership or transfer',async()=>{
+ const personal=crypto.randomUUID(),free=crypto.randomUUID();for(const id of [personal,free])await service('insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values($1,$2,now(),$3)',[id,id+'@storage.test',JSON.stringify({storage_unlimited:true})]);
+ const current=(await user(personal,"select create_band('Personal library') id")).rows[0].id;
+ assert.equal(Number((await service('select storage_limit from entitlements where band_id=$1',[current])).rows[0].storage_limit),FREE_STORAGE_BYTES);
+ await assert.rejects(user(personal,"insert into storage_account_overrides(user_id,storage_limit,plan) values($1,null,'personal')",[personal]),/permission denied/);
+ await assert.rejects(user(personal,'select apply_account_storage($1)',[current]),/permission denied/);
+ await service("insert into storage_account_overrides(user_id,storage_limit,plan) values($1,null,'personal')",[personal]);
+ assert.equal((await service('select storage_limit from entitlements where band_id=$1',[current])).rows[0].storage_limit,null);
+ const future=(await user(personal,"select create_band('Future personal library') id")).rows[0].id;
+ assert.equal((await service('select storage_limit from entitlements where band_id=$1',[future])).rows[0].storage_limit,null);
+ const ordinary=(await user(free,"select create_band('Free library') id")).rows[0].id;
+ await service("insert into band_memberships(band_id,user_id,role) values($1,$2,'member')",[ordinary,personal]);
+ assert.equal(Number((await service('select storage_limit from entitlements where band_id=$1',[ordinary])).rows[0].storage_limit),FREE_STORAGE_BYTES);
+ await service('update band_usage set stored_bytes=$2 where band_id=$1',[current,3*1024**3]);
+ const record=await input(current,personal);const job=await submit(record,current,personal);
+ await assert.rejects(user(personal,"select reserve_upload($1,$2,$3,$4,'too-large.mp3',999999999,2,44100,'original')",[current,record.song,crypto.randomUUID(),crypto.randomUUID()]),/Invalid audio/);
+ await service("update processing_jobs set status='completed',results='[]' where id=$1",[job]);
+ assert.ok((await user(personal,'select * from request_export($1)',[job])).rows[0].id);
+ await service("insert into band_memberships(band_id,user_id,role) values($1,$2,'member')",[current,free]);
+ await user(personal,'select transfer_ownership($1,$2)',[current,free]);
+ const entitlement=(await service('select * from entitlements where band_id=$1',[current])).rows[0];assert.equal(Number(entitlement.storage_limit),FREE_STORAGE_BYTES);assert.equal(entitlement.plan,'free');
+ await assert.rejects(user(free,"select reserve_upload($1,$2,$3,$4,'full.mp3',1000,2,44100,'original')",[current,record.song,crypto.randomUUID(),crypto.randomUUID()]),/Storage allowance/);
+ await service('delete from storage_account_overrides where user_id=$1',[personal]);
+ assert.equal(Number((await service('select storage_limit from entitlements where band_id=$1',[future])).rows[0].storage_limit),FREE_STORAGE_BYTES);
 });
 test.after(()=>db.close());
