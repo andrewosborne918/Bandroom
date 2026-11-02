@@ -74,7 +74,7 @@ test('Checkout uses the server price and stable attempt key, with hosted subscri
  const calls=[];t.mock.method(stripe.checkout.sessions,'create',async(...args)=>{calls.push(args);return {id:'cs_test',url:'https://checkout.stripe.com/test'}});
  const options={customer:'cus_band',price:'price_plus',attempt:crypto.randomUUID(),origin:'https://bndrm.test',tax:false};
  await createStorageCheckout(stripe,options);await createStorageCheckout(stripe,options);
- assert.deepEqual(calls[0],calls[1]);assert.equal(calls[0][0].mode,'subscription');assert.equal(calls[0][0].line_items[0].price,'price_plus');
+ assert.deepEqual(calls[0],calls[1]);assert.equal(calls[0][0].mode,'subscription');assert.deepEqual(calls[0][0].managed_payments,{enabled:false});assert.equal(calls[0][0].line_items[0].price,'price_plus');
  assert.equal('payment_method_types' in calls[0][0],false);assert.equal('automatic_tax' in calls[0][0],false);
  assert.match(calls[0][0].integration_identifier,/bndrm_storage_[a-z]{8}$/);
 });
