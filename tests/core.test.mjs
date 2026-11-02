@@ -276,3 +276,12 @@ test('clearing decoded audio during sign-out does not repopulate memory from an 
  const {DecodedAudioCache}=await import('../lib/audio-cache.ts');const cache=new DecodedAudioCache();let release;
  const pending=cache.load('private',()=>new Promise(resolve=>release=resolve),1000);cache.clear();release({length:10,numberOfChannels:1});await pending;assert.equal(cache.entries.size,0);assert.equal(cache.bytes,0);
 });
+
+test('processing readiness distinguishes queued audio, unfinished work and missing uploads',async()=>{
+ const {processingReadiness}=await import('../lib/processing-readiness.ts');
+ assert.equal(processingReadiness('queued',1,false),'Waiting for desktop processing');
+ assert.equal(processingReadiness('processing',5,true),'Processing on desktop');
+ assert.equal(processingReadiness('failed',0,false),'Processing needs attention');
+ assert.equal(processingReadiness(undefined,0,false),'Upload audio to process');
+ assert.equal(processingReadiness('completed',5,false),'Ready to review');
+});

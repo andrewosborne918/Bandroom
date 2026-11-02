@@ -293,8 +293,44 @@ async fn open_updates(app: tauri::AppHandle, window: tauri::WebviewWindow) -> Re
     }
     Ok(())
 }
+fn is_open_request(url: &str) -> bool {
+    matches!(url, "bndrm://open" | "bndrm://open/")
+}
+#[cfg(test)]
+mod tests {
+    use super::is_open_request;
+    #[test]
+    fn external_links_can_only_open_the_controller() {
+        assert!(is_open_request("bndrm://open"));
+        assert!(is_open_request("bndrm://open/"));
+        for url in ["bndrm://run/command", "bndrm://open?secret=anything", "https://bndrm.vercel.app", "bndrm://other-band"] {
+            assert!(!is_open_request(url));
+        }
+    }
+}
+fn focus_controller(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _, _| focus_controller(app)))
+        .plugin(tauri_plugin_deep_link::init())
+        .setup(|app| {
+            use tauri_plugin_deep_link::DeepLinkExt;
+            let handle = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                // Links only raise the controller. Never execute paths, accept credentials,
+                // switch bands or change permissions from an external URL.
+                if event.urls().iter().any(|url| is_open_request(url.as_str())) {
+                    focus_controller(&handle);
+                }
+            });
+            Ok(())
+        })
         .manage(Controller::default())
         .invoke_handler(tauri::generate_handler![
             connection_status,

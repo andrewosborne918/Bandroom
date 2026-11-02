@@ -1,3 +1,5 @@
+Bndrm Desktop 0.2.3 beta adds browser launch support. Install this update once to register bndrm://open. Open Bndrm Desktop from a waiting song or processing queue in the browser; the connected processor starts automatically. Opening the link while the app is already running brings its existing window forward. Links cannot run commands, change the connected band, or approve access.
+
 The website temporarily pauses earlier Mac installer downloads until this verified release is published.
 
 Bndrm Desktop 0.2.2 beta fixes the Mac app bundle signature. Both Mac installers are checked after mounting the final disk image and copying the app to a fresh folder. This includes strict code-signature verification, controller startup, and audio-processor inference from the installed bundle.

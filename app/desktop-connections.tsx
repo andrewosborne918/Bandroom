@@ -1,4 +1,5 @@
 'use client';
+import OpenDesktop from './open-desktop';
 import {useCallback,useEffect,useState} from 'react';
 type Device={id:string;name:string;platform:string;last_seen:string|null;online?:boolean};
 type Reply={devices?:Device[];error?:string};
@@ -13,7 +14,7 @@ export default function DesktopConnections({bandId}:{bandId:string}){
  async function act(fn:()=>Promise<void>){setBusy(true);setMessage('');try{await fn();setDevices(markOnline((await call('devices')).devices))}catch(e){setMessage(e instanceof Error?e.message:'Connection failed')}finally{setBusy(false)}}
  const approving=code.replace(/[^A-Z0-9]/g,'').length===10;
  return <section className="desktop-connections">
-  <h3>{approving?'Approve your desktop connection':'Your band’s desktop processors'}</h3>
+  <OpenDesktop/><h3>{approving?'Approve your desktop connection':'Your band’s desktop processors'}</h3>
   <p className="form-hint">{approving?'Your connection code is ready. Click Connect to this band below to approve the computer that displayed this code. Its processor starts automatically and picks up queued songs.':'Connect a computer once, then just drop songs into the library. Separation and analysis queue automatically while Bndrm Desktop is open.'}</p>
   {!approving&&!devices.length&&<a className="button subtle" href="/desktop" target="_blank" rel="noreferrer">Need the desktop app? Download for Mac or Windows</a>}
   <label>Connection code<input value={code} onChange={e=>setCode(e.target.value.toUpperCase())} maxLength={14} autoComplete="off" placeholder="AB12C DE345"/></label>
