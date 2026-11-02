@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import OpenDesktop from '../open-desktop';
 import {Check, Music2, Users, Laptop} from 'lucide-react';
 import DesktopDownloads from './downloads';
 export const metadata = {title:'Download Bndrm | Mac & Windows',description:'Download Bndrm for Mac or Windows. Prepare songs on your computer and rehearse together from any device.'};
@@ -11,6 +12,7 @@ export default function DesktopPage() {
       <p>Drop in a song. Bndrm prepares the stems on your Mac or PC. Your band joins on phones and tablets through the web app.</p>
       <div className="download-benefits"><span><Check size={16}/> Free desktop beta</span><span><Check size={16}/> No Terminal setup</span><span><Check size={16}/> Your computer does the processing</span></div>
     </section>
+    <OpenDesktop/>
     <DesktopDownloads/>
     <section className="download-how" aria-labelledby="download-how-title"><p className="eyebrow">FROM DOWNLOAD TO REHEARSAL</p><h2 id="download-how-title">Make room for the music.</h2><ol>
       <li><Laptop/><div><strong>Install & connect</strong><p>Open Bndrm Desktop, select Connect your band, then sign in and approve the connection code in your band workspace.</p></div></li>

@@ -76,3 +76,5 @@ worker-config.json
 
 /supabase/.temp/
 /desktop/src-tauri/icons/
+
+/desktop/src-tauri/gen/

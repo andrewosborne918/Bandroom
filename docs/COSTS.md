@@ -58,3 +58,15 @@ if needed. A replacement invitation invalidates the previous band invitation.
 `invitation_owners` is private and service-managed. Initial ownership is seeded
 only from existing personal account owners who already own a band. Removing a
 band member revokes access through the existing membership policies.
+
+## Browser-to-desktop processing
+
+The library shows queued and running processing jobs above its song cards and
+labels each waiting song. Missing uploads are labeled separately; opening Desktop
+cannot process audio that has not been uploaded. Completed jobs refresh library
+summaries automatically. Open Bndrm Desktop uses the bndrm://open URL scheme,
+registered by Desktop 0.2.3 and newer. Users must install that update once.
+The link only opens/focuses the controller; it does not contain credentials,
+approve a computer, change bands, or execute commands. Existing pairing and
+processing permissions still apply. Install/update links remain available if
+the browser cannot find a compatible desktop app.

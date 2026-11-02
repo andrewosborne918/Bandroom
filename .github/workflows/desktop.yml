@@ -69,6 +69,8 @@ jobs:
         run: python -c "from pathlib import Path; p=Path('desktop/src-tauri/runtime'); p.mkdir(exist_ok=True); (p/'compile-check.txt').write_text('Audio runtime is built after native compilation succeeds.')"
       - name: Compile desktop shell first
         run: cargo build --release --locked --features tauri/custom-protocol --target ${{ matrix.target }} --manifest-path desktop/src-tauri/Cargo.toml
+      - name: Test desktop link restrictions
+        run: cargo test --release --locked --features tauri/custom-protocol --target ${{ matrix.target }} --manifest-path desktop/src-tauri/Cargo.toml
       - name: Set up POSIX build tools on Windows
         id: msys
         if: runner.os == 'Windows'
@@ -139,6 +141,6 @@ jobs:
             echo 'A newer build supersedes this release.'
             exit 0
           fi
-          tag="desktop-v0.2.2-${GITHUB_SHA:0:7}"
+          tag="desktop-v0.2.3-${GITHUB_SHA:0:7}"
           mapfile -t files < <(find installers -type f \( -name '*.dmg' -o -name '*.exe' \))
-          gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" --prerelease --title "Bndrm Desktop 0.2.2 beta" --notes-file desktop/RELEASE-NOTES.md
+          gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" --prerelease --title "Bndrm Desktop 0.2.3 beta" --notes-file desktop/RELEASE-NOTES.md
