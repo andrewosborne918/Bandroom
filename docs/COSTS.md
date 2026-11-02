@@ -39,7 +39,8 @@ Run setup with the connected sandbox environment:
     node --env-file=.env.local scripts/setup-billing.mjs
 
 This creates/reuses the Plus product, monthly/annual prices, customer portal and
-signed webhook endpoint. It writes secrets only to the ignored local environment.
+signed webhook endpoint. Live events use /api/billing/webhook; sandbox events use
+/api/billing/sandbox-webhook and separate server-only sandbox credentials. It writes secrets only to the ignored local environment.
 Keep the webhook secret in Vercel sensitive variables; use a restricted Stripe key
 with only the required customer, subscription, invoice, charge, Checkout, portal,
 product/price and webhook permissions for production.
@@ -62,8 +63,9 @@ To launch real payments after sandbox verification:
    identity details, add a payout bank account, and finish Stripe activation.
 2. Confirm business jurisdiction and existing tax registrations. Do not enable
    automatic tax without active registrations and a verified tax calculation.
-3. Connect live credentials through Vercel and run setup with the explicit --live
-   flag. Configure the resulting live price IDs, portal configuration and signing
+3. Connect live credentials through Vercel, pull them into the ignored
+   .env.stripe-live.local file, and run setup with that env file and the explicit
+   --live flag. This keeps the local sandbox environment separate. Configure the resulting live price IDs, portal configuration and signing
    secret. Never reuse sandbox resource IDs or secrets for live billing.
 4. After verification, set BILLING_LIVE_ENABLED=true and redeploy. Until then,
    customers see pricing with checkout disabled. BILLING_SANDBOX_ENABLED permits

@@ -5,19 +5,23 @@ import {handleBillingWebhook} from '../billing-webhook';
 import {closeBillingCustomer} from '../close-billing';
 import {createStorageCheckout} from '../storage-checkout';
 
-export function stripeClient(){if(!process.env.STRIPE_SECRET_KEY)problem('Billing is not connected yet',503);return new Stripe(process.env.STRIPE_SECRET_KEY!,{maxNetworkRetries:2,timeout:15000})}
-export function billingConfig(){
- const key=process.env.STRIPE_SECRET_KEY||'',live=key.includes('_live_');
- const configured=!!key&&!!process.env.STRIPE_WEBHOOK_SECRET&&!!process.env.STRIPE_PLUS_MONTHLY_PRICE&&!!process.env.STRIPE_PLUS_ANNUAL_PRICE;
+type BillingMode='current'|'sandbox';
+const keyFor=(mode:BillingMode)=>mode==='sandbox'?process.env.STRIPE_SANDBOX_SECRET_KEY:process.env.STRIPE_SECRET_KEY;
+const secretFor=(mode:BillingMode)=>mode==='sandbox'?process.env.STRIPE_SANDBOX_WEBHOOK_SECRET:process.env.STRIPE_WEBHOOK_SECRET;
+const priceIds=(mode:BillingMode='current')=>mode==='sandbox'?[process.env.STRIPE_SANDBOX_PLUS_MONTHLY_PRICE!,process.env.STRIPE_SANDBOX_PLUS_ANNUAL_PRICE!]:[process.env.STRIPE_PLUS_MONTHLY_PRICE!,process.env.STRIPE_PLUS_ANNUAL_PRICE!];
+export function stripeClient(mode:BillingMode='current'){const key=keyFor(mode);if(!key||mode==='sandbox'&&!key.includes('_test_'))problem('Billing is not connected yet',503);return new Stripe(key,{maxNetworkRetries:2,timeout:15000})}
+export function billingConfig(mode:BillingMode='current'){
+ const key=keyFor(mode)||'',live=key.includes('_live_');
+ const configured=!!key&&!!secretFor(mode)&&priceIds(mode).every(Boolean);
  return {live,available:configured&&live&&process.env.BILLING_LIVE_ENABLED==='true',test:!!key&&!live};
 }
-const priceIds=()=>[process.env.STRIPE_PLUS_MONTHLY_PRICE!,process.env.STRIPE_PLUS_ANNUAL_PRICE!];
-export async function syncCustomer(customer:string,event?:{id:string;type:string},review=false){
+export async function syncCustomer(customer:string,event?:{id:string;type:string},review=false,mode:BillingMode='current'){
  const db=admin(),observed=new Date().toISOString();
  const account=await result(db.from('band_billing').select('band_id,livemode').eq('customer_id',customer).maybeSingle());
- if(!account)return;if(account.livemode!==billingConfig().live)throw Error('Billing mode mismatch');
- const subscriptions=await stripeClient().subscriptions.list({customer,status:'all',limit:100,expand:['data.latest_invoice']});
- const state=subscriptionState(subscriptions.data,priceIds());
+ if(!account)return;if(account.livemode!==billingConfig(mode).live)throw Error('Billing mode mismatch');
+ if(!priceIds(mode).every(Boolean))throw Error('Billing prices are not configured');
+ const subscriptions=await stripeClient(mode).subscriptions.list({customer,status:'all',limit:100,expand:['data.latest_invoice']});
+ const state=subscriptionState(subscriptions.data,priceIds(mode));
  await result(db.rpc('sync_band_billing',{customer,...state,observed,event_id:event?.id||null,event_kind:event?.type||'billing.refresh',review}));
 }
 async function ensureAccount(bandId:string){
@@ -33,11 +37,10 @@ export async function cancelBandBilling(bandId:string){
  await result(admin().from('bands').update({billing_closing:true}).eq('id',bandId));
  const accounts=await result(admin().from('band_billing').select('customer_id,livemode,checkout_session_id').eq('band_id',bandId));
  for(const account of accounts){
-  if(account.livemode!==billingConfig().live){
-   if(account.livemode)problem('Live billing must be connected before deleting this paid workspace',409);
-   continue;
-  }
-  await closeBillingCustomer(stripeClient(),account.customer_id,account.checkout_session_id);
+  if(account.livemode&&!billingConfig().live)problem('Live billing must be connected before deleting this paid workspace',409);
+  const mode:BillingMode=!account.livemode&&billingConfig().live?'sandbox':'current';
+  if(mode==='sandbox'&&!keyFor(mode))continue;
+  await closeBillingCustomer(stripeClient(mode),account.customer_id,account.checkout_session_id);
  }
  await result(admin().from('bands').update({billing_closed:true}).eq('id',bandId));
 }
@@ -91,12 +94,12 @@ export async function billingApi(req:Request):Promise<Response>{
   return json({url:session.url,test:config.test});
  }catch(e:any){return json({error:e.status?e.message:'Billing could not be completed. Please try again.'},e.status||502)}
 }
-export async function billingWebhook(req:Request){
- if(!process.env.STRIPE_SECRET_KEY||!process.env.STRIPE_WEBHOOK_SECRET)return json({error:'Webhook is not configured'},503);
+export async function billingWebhook(req:Request,mode:BillingMode='current'){
+ if(!keyFor(mode)||!secretFor(mode)||!priceIds(mode).every(Boolean))return json({error:'Webhook is not configured'},503);
  const db=admin();return handleBillingWebhook(req,{
-  stripe:stripeClient(),secret:process.env.STRIPE_WEBHOOK_SECRET,live:billingConfig().live,
+  stripe:stripeClient(mode),secret:secretFor(mode)!,live:billingConfig(mode).live,
   seen:async id=>!!await result(db.from('billing_events').select('id').eq('id',id).maybeSingle()),
-  sync:syncCustomer,
+  sync:(customer,event,review)=>syncCustomer(customer,event,review,mode),
   logReview:async event=>{await result(db.from('operation_events').insert({environment:process.env.APP_ENV||'unknown',kind:'billing.review_required',details:{eventId:event.id,eventType:event.type}}))},
   clearCheckout:async(customer,session)=>{await result(db.from('band_billing').update({checkout_attempt:null,checkout_interval:null,checkout_session_id:null}).eq('customer_id',customer).eq('checkout_session_id',session))},
  });

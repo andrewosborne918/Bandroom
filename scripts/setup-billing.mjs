@@ -1,11 +1,15 @@
 // Run with: node --env-file=.env.local scripts/setup-billing.mjs
 // Writes credentials only to the ignored local environment file.
 import Stripe from 'stripe';
+import {createHash} from 'node:crypto';
 import {readFileSync,writeFileSync} from 'node:fs';
 import {BILLING_EVENTS} from '../lib/billing-policy.ts';
+async function setup(){
 const key=process.env.STRIPE_SECRET_KEY;
 if(!key)throw Error('Pull the connected Stripe environment first.');
-if(key.includes('_live_')&&!process.argv.includes('--live'))throw Error('Live setup requires the explicit --live flag.');
+const live=process.argv.includes('--live');
+if(key.includes('_live_')!==live)throw Error('Use --live only with live credentials, and omit it for sandbox setup.');
+const envPath=live?'.env.stripe-live.local':'.env.local';
 const stripe=new Stripe(key);
 const origin=process.env.APP_ORIGIN||'https://bndrm.vercel.app';
 let product;
@@ -25,15 +29,19 @@ if(!portal)portal=await stripe.billingPortal.configurations.create({
  subscription_update:{enabled:true,default_allowed_updates:['price'],products:[{product:product.id,prices:[prices.month.id,prices.year.id]}],proration_behavior:'create_prorations'}},
  metadata:{bndrm:'storage-v1'},
 },{idempotencyKey:'bndrm-portal-v1'});
-const endpointUrl=origin+'/api/billing/webhook';
+const endpointUrl=origin+(live?'/api/billing/webhook':'/api/billing/sandbox-webhook');
 let endpoint=(await stripe.webhookEndpoints.list({limit:100})).data.find(e=>e.url===endpointUrl);
 let secret=process.env.STRIPE_WEBHOOK_SECRET;
 if(endpoint&&process.env.STRIPE_WEBHOOK_ENDPOINT_ID!==endpoint.id)throw Error('Existing webhook signing secret must be paired with its endpoint ID. Do not reuse another environment’s secret.');
-if(!endpoint){endpoint=await stripe.webhookEndpoints.create({url:endpointUrl,enabled_events:BILLING_EVENTS,api_version:Stripe.API_VERSION,description:'Bndrm storage subscriptions'},{idempotencyKey:'bndrm-storage-webhook-v1'});secret=endpoint.secret}
+if(!endpoint){endpoint=await stripe.webhookEndpoints.create({url:endpointUrl,enabled_events:BILLING_EVENTS,api_version:Stripe.API_VERSION,description:'Bndrm storage subscriptions'},{idempotencyKey:'bndrm-storage-webhook-'+createHash('sha256').update(endpointUrl).digest('hex').slice(0,16)+'-v2'});secret=endpoint.secret}
 if(!secret)throw Error('Webhook already exists; recover its signing secret from Stripe before continuing.');
-const values={STRIPE_PLUS_MONTHLY_PRICE:prices.month.id,STRIPE_PLUS_ANNUAL_PRICE:prices.year.id,STRIPE_PORTAL_CONFIGURATION:portal.id,STRIPE_WEBHOOK_SECRET:secret,STRIPE_WEBHOOK_ENDPOINT_ID:endpoint.id};
-let env=readFileSync('.env.local','utf8');
+const account=await stripe.accounts.retrieve();
+const values={STRIPE_ACCOUNT_ID:account.id,STRIPE_PLUS_MONTHLY_PRICE:prices.month.id,STRIPE_PLUS_ANNUAL_PRICE:prices.year.id,STRIPE_PORTAL_CONFIGURATION:portal.id,STRIPE_WEBHOOK_SECRET:secret,STRIPE_WEBHOOK_ENDPOINT_ID:endpoint.id};
+let env=readFileSync(envPath,'utf8');
 for(const [name,value] of Object.entries(values)){env=env.split('\n').filter(line=>!line.startsWith(name+'=')).join('\n').trimEnd()+'\n'+name+'='+JSON.stringify(value)+'\n'}
-writeFileSync('.env.local',env,{mode:0o600});
-const account=await stripe.accounts.retrieve(),tax=await stripe.tax.settings.retrieve();
+writeFileSync(envPath,env,{mode:0o600});
+const tax=await stripe.tax.settings.retrieve();
 console.log(JSON.stringify({product:product.id,monthly:prices.month.id,annual:prices.year.id,portal:portal.id,webhook:endpoint.id,live:key.includes('_live_'),chargesEnabled:account.charges_enabled,taxStatus:tax.status}));
+
+}
+setup().catch(error=>{console.error('Billing setup failed: '+String(error.message).replace(/(?:sk_|rk_|whsec_)[A-Za-z0-9_]+/g,'[REDACTED]'));process.exitCode=1});

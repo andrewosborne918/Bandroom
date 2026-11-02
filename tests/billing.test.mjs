@@ -26,6 +26,19 @@ test('webhook rejects forged signatures and wrong modes before touching billing 
  assert.equal(called,false);
  assert.equal((await handleBillingWebhook(new Request('https://bndrm.test/',{method:'POST',body:'x'.repeat(1048577)}),deps)).status,413);
 });
+test('live and sandbox receivers require their own signatures and matching event modes',async()=>{
+ let applied=0;
+ const sandbox=dependencies({secret:'whsec_sandbox_unit',sync:async()=>{applied++}});
+ const live=dependencies({secret:'whsec_live_unit',live:true,sync:async()=>{applied++}});
+ const signed=(e,key)=>{const payload=JSON.stringify(e);return new Request('https://bndrm.test/webhook',{method:'POST',body:payload,headers:{'stripe-signature':stripe.webhooks.generateTestHeaderString({payload,secret:key})}})};
+ const production=event('invoice.paid',{customer:'cus_live'},{livemode:true}),testing=event('invoice.paid',{customer:'cus_test'});
+ assert.equal((await handleBillingWebhook(signed(production,live.secret),live)).status,200);
+ assert.equal((await handleBillingWebhook(signed(testing,sandbox.secret),sandbox)).status,200);
+ assert.equal((await handleBillingWebhook(signed(production,live.secret),sandbox)).status,400);
+ assert.equal((await handleBillingWebhook(signed(testing,sandbox.secret),live)).status,400);
+ assert.equal((await handleBillingWebhook(signed(testing,live.secret),live)).status,400);
+ assert.equal(applied,2);
+});
 test('unpaid checkout never grants access and later async success resolves the Stripe customer',async()=>{
  const calls=[],deps=dependencies({sync:async(...args)=>calls.push(args)});
  await handleBillingWebhook(request(event('checkout.session.completed',{customer:'cus_band',payment_status:'unpaid'})),deps);assert.equal(calls.length,0);
