@@ -14,7 +14,7 @@
     "db:generate": "drizzle-kit generate",
     "build:vercel": "node scripts/sync-audio-worklet.mjs && next build --webpack",
     "start:vercel": "next start",
-    "test": "node --test tests/core.test.mjs tests/platform-db.test.mjs tests/recognition.test.mjs tests/import-info.test.mjs tests/public-hosting.test.mjs tests/desktop-db.test.mjs tests/rehearsal.test.mjs tests/batch-import.test.mjs",
+    "test": "node --test tests/core.test.mjs tests/platform-db.test.mjs tests/recognition.test.mjs tests/import-info.test.mjs tests/public-hosting.test.mjs tests/desktop-db.test.mjs tests/rehearsal.test.mjs tests/batch-import.test.mjs tests/billing.test.mjs",
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
@@ -42,6 +42,7 @@
     "react-resizable-panels": "^4.12.2",
     "recharts": "^3.8.0",
     "sonner": "^2.0.8",
+    "stripe": "23.0.0",
     "tailwind-merge": "3.6.0",
     "tus-js-client": "4.3.1",
     "vaul": "^1.1.2",
