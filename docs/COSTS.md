@@ -37,3 +37,24 @@ processing temporary-file cleanup. No songs are deleted to change this policy.
 Provider plans and terms can change. Check [Vercel Hobby](https://vercel.com/docs/plans/hobby),
 [Supabase pricing](https://supabase.com/pricing), and [R2 pricing](https://developers.cloudflare.com/r2/pricing/)
 for current limits. Reassess hosting terms before any future commercial use.
+
+## Invitation-only access
+
+Only the personal app owner may create workspaces or invitation links. Public
+signup is rejected by an Auth database trigger unless an active owner-issued
+invitation exists for that email. Existing accounts without a band cannot create
+workspaces. Existing band members keep their access.
+
+In Band settings, enter an email and role, then choose Create invitation link.
+Copy the link or use Email invitation to open an email draft in your mail app.
+The app does not send the message automatically and needs no email-provider
+subscription. Send the link only to its intended recipient: it contains a
+single-use Supabase authentication token. Opening it does not consume it; the
+recipient must submit the invitation form, choose a password, and join. Band
+membership requires the verified email to match the invitation. The Supabase
+auth token can expire before the 48-hour band invitation; generate a new link
+if needed. A replacement invitation invalidates the previous band invitation.
+
+`invitation_owners` is private and service-managed. Initial ownership is seeded
+only from existing personal account owners who already own a band. Removing a
+band member revokes access through the existing membership policies.
