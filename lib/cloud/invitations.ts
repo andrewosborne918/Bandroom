@@ -1,3 +1,4 @@
+import {validInvitationTokenHash} from '../invitation-token';
 import {createHash} from 'node:crypto';
 import {admin,client,json,problem,result} from './clients';
 const hash=(token:string)=>createHash('sha256').update(token).digest('hex');
@@ -18,7 +19,7 @@ export async function makeInvitation(db:any,bandId:string,emailInput:unknown,rol
 }
 export async function acceptInvitation(req:Request){
  const body:any=await req.json(),token=String(body.token||''),tokenHash=String(body.tokenHash||'');
- if(token.length!==72||!/^[a-f0-9]{64}$/i.test(tokenHash)||!['invite','magiclink','signup'].includes(body.type))problem('This invitation link is invalid. Ask for a new link.');
+ if(token.length!==72||!validInvitationTokenHash(tokenHash)||!['invite','magiclink','signup'].includes(body.type))problem('This invitation link is invalid. Ask for a new link.');
  if(typeof body.password!=='string'||body.password.length<12||body.password.length>256)problem('Choose a password with at least 12 characters.');
  const invite=await result(admin().from('invitations').select('email,expires_at,accepted_at,declined_at').eq('token_hash',hash(token)).maybeSingle());
  if(!invite||invite.accepted_at||invite.declined_at||Date.parse(invite.expires_at)<=Date.now())problem('This invitation has expired or was used. Ask for a new link.',409);

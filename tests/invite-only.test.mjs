@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {validInvitationTokenHash} from '../lib/invitation-token.ts';
 import assert from 'node:assert/strict';
 import {readFileSync,readdirSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
@@ -49,4 +50,9 @@ test('legacy uninvited accounts cannot create workspaces or invite people',async
  await assert.rejects(user(legacy,"select create_band('Blocked')"),/Only the app owner/);
  await assert.rejects(user(legacy,"select invite_member($1,'next@private.test','member','nope')",[band]),/Invitation permission denied/);
  assert.equal((await user(legacy,'select count(*)::int count from bands')).rows[0].count,0);
+});
+
+test('invitation acceptance accepts actual provider token sizes and rejects unsafe or unbounded input',()=>{
+ for(const token of ['a'.repeat(56),'b'.repeat(64),'opaque_provider_token_'.repeat(3)])assert.equal(validInvitationTokenHash(token),true);
+ for(const token of ['', 'x'.repeat(257),'a b'.repeat(20),'http://untrusted.example'])assert.equal(validInvitationTokenHash(token),false);
 });
