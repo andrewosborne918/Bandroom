@@ -20,3 +20,15 @@ create function realtime.send(payload jsonb,event text,topic text,private boolea
 grant usage on schema realtime to authenticated;
 grant select on realtime.messages to authenticated;
 grant execute on function realtime.topic() to authenticated;
+
+-- Fixture identities represent people already approved by the app owner.
+-- This test-only trigger is absent from production; invite security tests drop it.
+create function auth.approve_fixture_identity() returns trigger language plpgsql as $$
+begin
+ if to_regclass('public.invitation_owners') is not null then
+  insert into public.invitation_owners(user_id) values(new.id) on conflict do nothing;
+ end if;
+ return new;
+end$$;
+create trigger aaa_approve_fixture_identity before insert on auth.users
+ for each row execute function auth.approve_fixture_identity();
