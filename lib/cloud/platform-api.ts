@@ -1,9 +1,9 @@
 import {cookies} from 'next/headers';
-import {billingApi,cancelBandBilling} from './billing';
+import {cancelBandBilling} from './billing';
 import {admin,identity,workspace,result,json,problem,origin,audit,configured} from './clients';
 export async function sha(value:string){return [...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)))].map(b=>b.toString(16).padStart(2,'0')).join('')}
 export async function platformApi(req:Request){const p=new URL(req.url).pathname.split('/').filter(Boolean).slice(2);try{origin(req);
- if(p[0]==='billing')return billingApi(req);
+ if(p[0]==='billing')return json({error:'Subscriptions are not available. Bndrm is for personal band use.'},404);
  if(p[0]==='config')return json({enabled:configured(),environment:process.env.APP_ENV||'development',google:process.env.NEXT_PUBLIC_GOOGLE_LOGIN==='true'});
  const {db,user}=await identity();
  if(p[0]==='worker-config')problem('Install Bndrm Desktop and connect it to your band. Shared processor credentials are no longer distributed.',410);

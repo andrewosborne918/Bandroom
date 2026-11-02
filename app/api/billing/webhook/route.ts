@@ -1,3 +1,2 @@
-import {billingWebhook} from '../../../../lib/cloud/billing';
 export const runtime='nodejs';
-export const POST=(req:Request)=>billingWebhook(req);
+export function POST(){return Response.json({error:'Billing is disabled for this personal-use app.'},{status:410,headers:{'Cache-Control':'no-store'}})}
