@@ -96,6 +96,13 @@ test('only service can manage billing; sandbox subscriptions cannot enlarge prod
  await sync('cus_sandbox');assert.equal(Number((await limit()).storage_limit),2*1024**3);
  await sync('cus_live');assert.equal(Number((await limit()).storage_limit),PLUS_STORAGE_BYTES);
 });
+test('Stripe-derived billing payload matches the database named RPC contract',async()=>{
+ const payload={customer:'cus_sandbox',...subscriptionState([subscription()],['price_plus']),observed:new Date().toISOString(),event_id:'evt_contract',event_kind:'invoice.paid',review:false};
+ const entries=Object.entries(payload);
+ await service('select sync_band_billing('+entries.map(([key],i)=>key+'=>$'+(i+1)).join(',')+')',entries.map(([,value])=>value));
+ const row=(await service("select status,has_plus from band_billing where customer_id='cus_sandbox'")).rows[0];
+ assert.equal(row.status,'active');assert.equal(row.has_plus,true);
+});
 test('checkout retries reuse one attempt and cannot open two billing intervals',async()=>{
  const first=(await service("select billing_checkout_attempt($1,'month',true) id",[band])).rows[0].id;
  assert.equal((await service("select billing_checkout_attempt($1,'month',true) id",[band])).rows[0].id,first);
