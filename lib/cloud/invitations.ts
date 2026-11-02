@@ -20,7 +20,7 @@ export async function makeInvitation(db:any,bandId:string,emailInput:unknown,rol
 export async function acceptInvitation(req:Request){
  const body:any=await req.json(),token=String(body.token||''),tokenHash=String(body.tokenHash||'');
  if(token.length!==72||!validInvitationTokenHash(tokenHash)||!['invite','magiclink','signup'].includes(body.type))problem('This invitation link is invalid. Ask for a new link.');
- if(typeof body.password!=='string'||body.password.length<12||body.password.length>256)problem('Choose a password with at least 12 characters.');
+ if(typeof body.password!=='string'||body.password.length<10||body.password.length>256)problem('Choose a password with at least 10 characters.');
  const invite=await result(admin().from('invitations').select('email,expires_at,accepted_at,declined_at').eq('token_hash',hash(token)).maybeSingle());
  if(!invite||invite.accepted_at||invite.declined_at||Date.parse(invite.expires_at)<=Date.now())problem('This invitation has expired or was used. Ask for a new link.',409);
  const db=await client();
