@@ -119,6 +119,9 @@ jobs:
             desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
             desktop/src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
   publish:
+    # Each uploaded artifact already passed its platform verification. A transient
+    # failure on another platform must not hide working installers.
+    if: ${{ !cancelled() }}
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -141,6 +144,6 @@ jobs:
             echo 'A newer build supersedes this release.'
             exit 0
           fi
-          tag="desktop-v0.2.4-${GITHUB_SHA:0:7}"
+          tag="desktop-v0.2.5-${GITHUB_SHA:0:7}"
           mapfile -t files < <(find installers -type f \( -name '*.dmg' -o -name '*.exe' \))
-          gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" --prerelease --title "Bndrm Desktop 0.2.4 beta" --notes-file desktop/RELEASE-NOTES.md
+          gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" --prerelease --title "Bndrm Desktop 0.2.5 beta" --notes-file desktop/RELEASE-NOTES.md

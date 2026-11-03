@@ -294,3 +294,12 @@ test('processing requires usable audio, prefers originals and excludes expired d
  assert.equal(processingInputState([{source:'original',status:'pending'}]),'ready');
  assert.equal(processingReadiness('expired',0,false),'Upload recording again');
 });
+
+test('desktop environment is shared by download and launch controls, including HTTPS webviews',async()=>{
+ const {isDesktopEnvironment}=await import('../lib/desktop-environment.ts');
+ assert.equal(isDesktopEnvironment(undefined),false);
+ assert.equal(isDesktopEnvironment({location:{protocol:'https:'}},'Safari'),false);
+ assert.equal(isDesktopEnvironment({__BNDRM_DESKTOP__:true,location:{protocol:'https:'}},'Safari'),true);
+ assert.equal(isDesktopEnvironment({__TAURI__:{}}),true);
+ assert.equal(isDesktopEnvironment({location:{protocol:'tauri:'}}),true);
+});
