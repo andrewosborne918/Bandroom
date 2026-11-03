@@ -140,6 +140,7 @@ async fn open_band(
         old.set_focus().map_err(|_| "Unable to focus Bndrm")?;
         return Ok(());
     }
+    let mail_app = app.clone();
     tauri::WebviewWindowBuilder::new(
         &app,
         "band",
@@ -149,10 +150,38 @@ async fn open_band(
     .title("Bndrm · Library & Session")
     .inner_size(1280.0, 900.0)
     .disable_drag_drop_handler()
-    .on_navigation(move |url| url.origin().ascii_serialization() == base)
+    .on_navigation(move |url| route_band_navigation(url, &base, |draft| {
+        if tauri_plugin_opener::open_url(draft, None::<&str>).is_err() {
+            if let Some(window) = mail_app.get_webview_window("band") {
+                let _ = window.eval("window.dispatchEvent(new CustomEvent('bndrm-email-draft-result',{detail:'failed'}))");
+            }
+        }
+    }))
     .build()
     .map_err(|e| e.to_string())?;
     Ok(())
+}
+fn is_email_draft(url: &reqwest::Url) -> bool {
+    if url.scheme() != "mailto" || url.host_str().is_some() || url.fragment().is_some()
+        || url.as_str().len() > 16384 || !url.query_pairs().all(|(key, _)| key == "subject" || key == "body") {
+        return false;
+    }
+    // query_pairs performs percent-decoding without accepting mailto headers as
+    // additional recipients. Only one recipient is permitted.
+    let Ok(recipient_url) = reqwest::Url::parse(&format!("https://validation.invalid/?to={}", url.path())) else { return false };
+    let Some((_, recipient)) = recipient_url.query_pairs().next() else { return false };
+    let parts: Vec<_> = recipient.split('@').collect();
+    parts.len() == 2 && !parts[0].is_empty() && parts[1].contains('.')
+        && parts[1].chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+        && !recipient.chars().any(|c| c.is_control() || c.is_whitespace() || "<>,;:?/#\\".contains(c))
+}
+fn route_band_navigation<F: FnOnce(&str)>(url: &reqwest::Url, base: &str, open_draft: F) -> bool {
+    if is_email_draft(url) {
+        open_draft(url.as_str());
+        false // Keep the band workspace open instead of navigating to mailto.
+    } else {
+        url.origin().ascii_serialization() == base
+    }
 }
 fn stop(controller: &Controller) {
     if let Some(mut child) = controller.child.lock().unwrap().take() {
@@ -329,6 +358,19 @@ mod tests {
         for value in ["not a URL", "https://example.com", "http://localhost.evil:3000", "http://user:pass@localhost:3000", "http://localhost:3000/path", "http://localhost:3000?token=x"] {
             assert_eq!(configured_origin(Some(value), true), DEFAULT_ORIGIN);
         }
+    }
+    #[test]
+    fn email_drafts_open_externally_without_navigating_the_workspace() {
+        let mut opened = false;
+        let url = reqwest::Url::parse("mailto:person%2Bband%40example.com?subject=Join&body=Private%20invitation").unwrap();
+        assert!(!super::route_band_navigation(&url, DEFAULT_ORIGIN, |_| opened = true));
+        assert!(opened);
+        for value in ["https://evil.example/", "file:///etc/passwd", "javascript:alert(1)", "mailto:one@example.com,two@example.com", "mailto:one%0A@example.com", "mailto:one@example.com?bcc=other@example.com", "mailto:one@example.com#fragment", "mailto://host/person@example.com", "mailto:one@example.com%26bcc=other@example.com"] {
+            let url = reqwest::Url::parse(value).unwrap();
+            assert!(!super::route_band_navigation(&url, DEFAULT_ORIGIN, |_| panic!("Invalid draft opened")), "{value}");
+        }
+        let url = reqwest::Url::parse(DEFAULT_ORIGIN).unwrap();
+        assert!(super::route_band_navigation(&url, DEFAULT_ORIGIN, |_| panic!("Workspace opened externally")));
     }
     #[test]
     fn external_links_can_only_open_the_controller() {

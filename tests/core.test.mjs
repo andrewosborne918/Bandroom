@@ -303,3 +303,13 @@ test('desktop environment is shared by download and launch controls, including H
  assert.equal(isDesktopEnvironment({__TAURI__:{}}),true);
  assert.equal(isDesktopEnvironment({location:{protocol:'tauri:'}}),true);
 });
+
+test('invitation draft preserves its recipient and private link as encoded message data',async()=>{
+ const {invitationEmail}=await import('../lib/invitation-email.ts');
+ const link='https://bndrm.vercel.app/?invite=example&invite_hash=test-value';
+ const draft=invitationEmail('band+mate@example.com',link),url=new URL(draft.href);
+ assert.equal(decodeURIComponent(url.pathname),'band+mate@example.com');
+ assert.equal(url.searchParams.get('subject'),draft.subject);
+ assert.equal(url.searchParams.get('body'),draft.body);
+ assert.ok(draft.body.includes(link));assert.deepEqual([...url.searchParams.keys()],['subject','body']);
+});
