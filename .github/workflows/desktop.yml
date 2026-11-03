@@ -144,6 +144,8 @@ jobs:
             echo 'A newer build supersedes this release.'
             exit 0
           fi
-          tag="desktop-v0.2.6-${GITHUB_SHA:0:7}"
+          version="$(python -c 'import json; print(json.load(open("desktop/src-tauri/tauri.conf.json"))["version"])')"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Invalid desktop version'; exit 1; }
+          tag="desktop-v${version}-${GITHUB_SHA:0:7}"
           mapfile -t files < <(find installers -type f \( -name '*.dmg' -o -name '*.exe' \))
-          gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" --prerelease --title "Bndrm Desktop 0.2.6 beta" --notes-file desktop/RELEASE-NOTES.md
+          gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" --prerelease --title "Bndrm Desktop ${version} beta" --notes-file desktop/RELEASE-NOTES.md
