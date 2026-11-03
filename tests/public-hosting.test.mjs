@@ -128,12 +128,13 @@ test('worker duration accepts fractional verified audio without broadening uploa
  assert.equal(workerDurationLimit(600,600),601);
 });
 
-test('computer cache fits rehearsal sets over 1 GiB, stays bounded by browser quota and retains mobile limits',()=>{
+test('computer cache fits rehearsal sets over 1 GiB, stays bounded by browser quota and respects mobile disk quota',()=>{
  const setBytes=1044*1024*1024;
  assert.ok(cacheBudgetFor('Macintosh')>setBytes);
  assert.equal(cacheBudgetFor('Macintosh'),8*1024*1024*1024);
  assert.equal(cacheBudgetFor('Macintosh',2*1024*1024*1024),1024*1024*1024);
- assert.equal(cacheBudgetFor('iPhone',100*1024*1024*1024),256*1024*1024);
+ assert.equal(cacheBudgetFor('iPhone',100*1024*1024*1024),4*1024*1024*1024);
+ assert.equal(cacheBudgetFor('iPhone',1024*1024*1024),512*1024*1024);
  assert.equal(cacheBudgetFor('Macintosh',0),0);
  assert.ok(Number.isFinite(deviceCacheBudget()));
 });

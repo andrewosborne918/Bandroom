@@ -21,4 +21,4 @@ export function audibleStems(song:Song,audience=false){return song.stems.filter(
 export function librarySummary(song:Song){return {id:song.id,title:song.title,artist:song.artist,bpm:song.bpm,key:song.key,duration:song.duration,stemCount:song.stems.length,reviewed:!!song.info?.playbackConfirmed}}
 export function pageRequest(url:URL){const limit=Math.max(1,Math.min(100,Number(url.searchParams.get('limit'))||50));const offset=Math.max(0,Math.min(100000,Number(url.searchParams.get('offset'))||0));return {limit:Math.floor(limit),offset:Math.floor(offset),query:(url.searchParams.get('q')||'').trim().slice(0,100)}}
 
-export function requiredStems(song:Song,audience=false,backing=true){return audibleStems(song,audience).filter(st=>audience||backing||restricted(st))}
+export function requiredStems(song:Song,audience=false,backing=true){return audibleStems(song,audience).filter(st=>(audience||backing||restricted(st))&&!(st.name==='Full recording'&&!st.enabled&&song.stems.some(other=>other.source==='ai')))}
