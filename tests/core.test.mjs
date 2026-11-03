@@ -285,3 +285,12 @@ test('processing readiness distinguishes queued audio, unfinished work and missi
  assert.equal(processingReadiness(undefined,0,false),'Upload audio to process');
  assert.equal(processingReadiness('completed',5,false),'Ready to review');
 });
+
+test('processing requires usable audio, prefers originals and excludes expired deleted uploads',async()=>{
+ const {processingInput,processingInputState,processingReadiness}=await import('../lib/processing-readiness.ts');
+ const deleted={source:'original',status:'deleting'},pending={source:'import',status:'pending'},stem={source:'import',status:'verified'},original={source:'original',status:'verified'};
+ assert.equal(processingInputState([]),'missing');assert.equal(processingInputState([deleted]),'missing');assert.equal(processingInputState([pending]),'verifying');
+ assert.equal(processingInput([deleted,pending,stem,original]),original);assert.equal(processingInput([deleted,stem]),stem);
+ assert.equal(processingInputState([{source:'original',status:'pending'}]),'ready');
+ assert.equal(processingReadiness('expired',0,false),'Upload recording again');
+});

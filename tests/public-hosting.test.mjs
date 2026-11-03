@@ -71,7 +71,7 @@ test('overall ETA needs observed processing, excludes idle or stale updates and 
  assert.equal(overallRemaining({...p,updatedAt:start+5000},start+5000),undefined);
 });
 
-import {DeviceAudioCache,assetCacheKey,deviceAudioCache,mapAudio} from '../lib/device-audio-cache.ts';
+import {DeviceAudioCache,assetCacheKey,deviceAudioCache,mapAudio,deviceCacheBudget} from '../lib/device-audio-cache.ts';
 import {authorizePrivateAudio} from '../lib/private-audio.ts';
 class LocalAudioStore{
  entries=new Map();
@@ -126,4 +126,13 @@ test('worker duration accepts fractional verified audio without broadening uploa
  assert.equal(workerDurationLimit(136,136),137);
  assert.equal(workerDurationLimit(327,327.6),328);
  assert.equal(workerDurationLimit(600,600),601);
+});
+
+test('unlimited cloud storage cannot overstate or disable the local cache budget',()=>{
+ const local=deviceCacheBudget();
+ assert.ok(Number.isFinite(local)&&local>0);
+ assert.equal(deviceCacheBudget(null),local);
+ assert.equal(deviceCacheBudget(local*4),local);
+ assert.equal(deviceCacheBudget(0),0);
+ assert.equal(deviceCacheBudget(local/2),local/2);
 });

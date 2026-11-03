@@ -2,7 +2,11 @@
 // Callers must authorize the asset with the server BEFORE reading this cache.
 type Store=Pick<Cache,'match'|'put'|'delete'|'keys'>;
 const cacheName='bndrm-private-audio-v1';
-export const deviceCacheBudget=()=>typeof navigator!=='undefined'&&/iPhone|iPad|Android/i.test(navigator.userAgent)?256*1024*1024:1024*1024*1024;
+// Cloud storage entitlement does not increase a browser's local disk budget.
+export const deviceCacheBudget=(limit?:number|null)=>{
+ const local=typeof navigator!=='undefined'&&/iPhone|iPad|Android/i.test(navigator.userAgent)?256*1024*1024:1024*1024*1024;
+ return typeof limit==='number'&&Number.isFinite(limit)&&limit>=0?Math.min(limit,local):local;
+};
 export const assetCacheKey=(scope:string,id:string,bytes:number)=>scope+':'+id+':'+bytes;
 export class DeviceAudioCache{
  persistent:boolean|null=null;
