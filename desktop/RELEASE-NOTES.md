@@ -1,3 +1,5 @@
+Bndrm Desktop 0.2.6 beta opens invitation email drafts in the system default email app. Mail links keep the workspace open and are limited to a single recipient with subject/body fields; the online workspace receives no general native permissions. The website now explains draft sending and offers a copyable email message as a fallback.
+
 Bndrm Desktop 0.2.5 beta fixes verification of MP3 files with embedded album artwork. Only audio streams are decoded; valid audio no longer fails because a video encoder is unavailable. The actual frozen verifier is regression-tested using a synthetic MP3 with JPEG cover art.
 
 Bndrm Desktop 0.2.4 beta refreshes the app branding and keeps installed builds connected to the production website. Localhost overrides are limited to development builds, use a separate credential entry, and cannot redirect a packaged app. The desktop library identifies itself so the website can hide its redundant download button.
