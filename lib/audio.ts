@@ -1,3 +1,4 @@
+import {WavStream,wavHeader,type AudioRange} from './wav-stream.ts';
 import {safeLoop,transportPosition} from './rehearsal.ts';
 import {audioCacheKey,decodedAudioCache,deviceAudioBudget} from './audio-cache.ts';
 import {beatMap} from './analysis.ts';
@@ -7,8 +8,21 @@ export class BandAudio {
   context: AudioContext | null=null;
   buffers=new Map<string,AudioBuffer>();
   bufferKeys=new Map<string,string>();
+  streams=new Map<string,WavStream>();private streamStops:(()=>void)[]=[];
+  onStreamError:(error:Error)=>void=()=>{};
+  async loadWav(songId:string,stem:import('./types').Stem,read:AudioRange,retain:()=>boolean=()=>true){
+    if(this.hasStem(songId,stem))return;
+    if(!this.context)this.context=new AudioContext({latencyHint:'interactive'});
+    const header=await wavHeader(read,stem.bytes);if(this.streamingBytes+Math.min(24,header.duration)*header.channels*header.sampleRate*4>deviceAudioBudget())throw Error('This high-resolution arrangement exceeds this device’s audio memory. Reduce its tracks or use a computer.');const stream=new WavStream(this.context,header,read);
+    await stream.prepare(0);if(!retain()){stream.clear();return}this.streams.get(stem.id)?.clear();this.streams.set(stem.id,stream);this.bufferKeys.set(stem.id,audioCacheKey(songId,stem));
+  }
+  releaseExcept(keep:Set<string>){for(const id of this.buffers.keys())if(!keep.has(id)){this.buffers.delete(id);this.bufferKeys.delete(id)}for(const [id,stream] of this.streams)if(!keep.has(id)){stream.clear();this.streams.delete(id);this.bufferKeys.delete(id)}}
+  get streamingBytes(){return [...this.streams.values()].reduce((n,stream)=>n+Math.min(24,stream.header.duration)*stream.header.channels*stream.header.sampleRate*4,0)}
+  clearAudio(){this.releaseExcept(new Set());this.bufferKeys.clear()}
+  async preparePlayback(song:Song,t:Transport){const position=transportPosition(t,Math.max(t.startAt,this.now()+100),song.duration);await Promise.all(song.stems.map(async stem=>{const stream=this.streams.get(stem.id);if(!stream)return;await stream.prepare(Math.max(0,position-(stem.offset||0)));const loop=safeLoop(t.loop,song.duration);if(loop)await stream.prepare(Math.max(0,loop.start-(stem.offset||0)),Math.min(8,loop.end-loop.start))}))}
+
   async loadStem(songId:string,stem:import('./types').Stem,loader:()=>Promise<ArrayBuffer>,retain:()=>boolean=()=>true,background=false){const key=audioCacheKey(songId,stem);if(this.bufferKeys.get(stem.id)===key&&this.buffers.has(stem.id))return this.buffers.get(stem.id)!;const buffer=await decodedAudioCache.load(key,async()=>this.decode(await loader(),!background),deviceAudioBudget());if(retain()){this.buffers.set(stem.id,buffer);this.bufferKeys.set(stem.id,key)}return buffer;}
-  hasStem(songId:string,stem:import('./types').Stem){return this.buffers.has(stem.id)&&this.bufferKeys.get(stem.id)===audioCacheKey(songId,stem);}
+  hasStem(songId:string,stem:import('./types').Stem){return (this.buffers.has(stem.id)||this.streams.has(stem.id))&&this.bufferKeys.get(stem.id)===audioCacheKey(songId,stem);}
   sources:AudioBufferSourceNode[]=[];
   effects:AudioNode[]=[];
   private rateOutput:AudioNode|null=null;
@@ -34,7 +48,7 @@ export class BandAudio {
   get ready(){return this.context?.state==='running';}
   get latency(){return this.context?.outputLatency||this.context?.baseLatency||0;}
   async decode(data:ArrayBuffer,activate=true){ if(activate)await this.arm();else if(!this.context)this.context=new AudioContext({latencyHint:'interactive'});return await this.context!.decodeAudioData(data); }
-  stop(){this.clicks.forEach(o=>{try{o.stop();}catch{}});this.clicks.clear();this.sources.forEach(s=>{try{s.stop();}catch{}});this.sources=[];this.effects.forEach(n=>n.disconnect());this.effects=[];this.rateOutput=null;this.gains.clear();this.pans.clear();if(this.timer)clearInterval(this.timer);this.timer=null;this.run='';this.transport=null;}
+  stop(){this.streamStops.forEach(stop=>stop());this.streamStops=[];this.clicks.forEach(o=>{try{o.stop();}catch{}});this.clicks.clear();this.sources.forEach(s=>{try{s.stop();}catch{}});this.sources=[];this.effects.forEach(n=>n.disconnect());this.effects=[];this.rateOutput=null;this.gains.clear();this.pans.clear();if(this.timer)clearInterval(this.timer);this.timer=null;this.run='';this.transport=null;}
   output(node:AudioNode,click=false){
     if(this.audience&&click)return;
     const ctx=this.context!;
@@ -49,14 +63,17 @@ export class BandAudio {
     if(offset<song.duration){
       for(const stem of song.stems){
         if(this.audience&&restricted(stem))continue;const privateStem=restricted(stem);
-        const buffer=this.buffers.get(stem.id),stemOffset=stem.offset||0,bufferOffset=Math.max(0,offset-stemOffset),stemWhen=when+Math.max(0,stemOffset-offset);if(!buffer||!loop&&(bufferOffset>=buffer.duration||stemOffset>=song.duration))continue;
-        const src=ctx.createBufferSource(),gain=ctx.createGain();if(!loop)src.buffer=buffer;if(rate!==1)src.playbackRate.value=rate;
+        const buffer=this.buffers.get(stem.id),stream=this.streams.get(stem.id),stemOffset=stem.offset||0,bufferOffset=Math.max(0,offset-stemOffset);if((!buffer&&!stream)||!loop&&(bufferOffset>=(stream?.header.duration??buffer!.duration)||stemOffset>=song.duration))continue;
+        const gain=ctx.createGain();gain.gain.value=stem.enabled&&(privateStem?(stem.category==='click'?this.click:this.cues):this.stems)&&(!song.stems.some(s=>s.solo&&!this.audience||s.solo&&!restricted(s))||stem.solo)?stem.volume*(stem.category==='click'?this.clickVolume:1):0;
+        const privateAudio=restricted(stem);if(ctx.createStereoPanner&&!this.split){const pan=ctx.createStereoPanner();pan.pan.value=stem.pan||0;this.pans.set(stem.id,pan);gain.connect(pan);this.output(pan,privateAudio);}else this.output(gain,privateAudio);this.gains.set(stem.id,gain);
+        if(stream){this.streamStops.push(stream.schedule(ctx,gain,{when,offset,duration:song.duration,stemOffset,rate,loop},error=>{this.stop();this.onStreamError(error)}));continue}
+        const audio=buffer!,src=ctx.createBufferSource();if(!loop)src.buffer=audio;if(rate!==1)src.playbackRate.value=rate;
         let loopOffset=bufferOffset;
         if(loop){
-          const frames=Math.ceil((loop.end-loop.start)*buffer.sampleRate),piece=ctx.createBuffer(buffer.numberOfChannels,frames,buffer.sampleRate);
-          for(let channel=0;channel<buffer.numberOfChannels;channel++){const from=Math.round((loop.start-stemOffset)*buffer.sampleRate),read=Math.max(0,from),write=Math.max(0,-from),length=Math.min(buffer.length-read,frames-write);if(length>0)piece.getChannelData(channel).set(buffer.getChannelData(channel).subarray(read,read+length),write)}
+          const frames=Math.ceil((loop.end-loop.start)*audio.sampleRate),piece=ctx.createBuffer(audio.numberOfChannels,frames,audio.sampleRate);
+          for(let channel=0;channel<audio.numberOfChannels;channel++){const from=Math.round((loop.start-stemOffset)*audio.sampleRate),read=Math.max(0,from),write=Math.max(0,-from),length=Math.min(audio.length-read,frames-write);if(length>0)piece.getChannelData(channel).set(audio.getChannelData(channel).subarray(read,read+length),write)}
           src.buffer=piece;src.loop=true;src.loopStart=0;src.loopEnd=piece.duration;loopOffset=Math.max(0,offset-loop.start)%piece.duration;
-        }gain.gain.value=stem.enabled&&(privateStem?(stem.category==='click'?this.click:this.cues):this.stems)&&(!song.stems.some(s=>s.solo&&!this.audience||s.solo&&!restricted(s))||stem.solo)?stem.volume*(stem.category==='click'?this.clickVolume:1):0;src.connect(gain);const privateAudio=restricted(stem);if(ctx.createStereoPanner&&!this.split){const pan=ctx.createStereoPanner();pan.pan.value=stem.pan||0;this.pans.set(stem.id,pan);gain.connect(pan);this.output(pan,privateAudio);}else this.output(gain,privateAudio);if(loop)src.start(when,loopOffset);else src.start(when+Math.max(0,stemOffset-offset)/rate,bufferOffset,Math.max(.001,song.duration-Math.max(offset,stemOffset)));this.sources.push(src);this.gains.set(stem.id,gain);
+        }src.connect(gain);if(loop)src.start(when,loopOffset);else src.start(when+Math.max(0,stemOffset-offset)/rate,bufferOffset,Math.max(.001,song.duration-Math.max(offset,stemOffset)));this.sources.push(src);
       }
     }
     const map=beatMap(song),shift=map?.length?(song.beatOffset-map[0]):0;
