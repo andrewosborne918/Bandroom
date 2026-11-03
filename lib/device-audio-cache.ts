@@ -2,7 +2,17 @@
 // Callers must authorize the asset with the server BEFORE reading this cache.
 type Store=Pick<Cache,'match'|'put'|'delete'|'keys'>;
 const cacheName='bndrm-private-audio-v1';
-export const deviceCacheBudget=()=>typeof navigator!=='undefined'&&/iPhone|iPad|Android/i.test(navigator.userAgent)?256*1024*1024:1024*1024*1024;
+// Encoded files use disk, not decoded audio memory. Cloud entitlement is unrelated.
+export function cacheBudgetFor(userAgent:string,quota?:number){
+ const ceiling=/iPhone|iPad|Android/i.test(userAgent)?256*1024*1024:8*1024*1024*1024;
+ return typeof quota==='number'&&Number.isFinite(quota)&&quota>=0?Math.min(ceiling,Math.floor(quota/2)):ceiling;
+}
+let observedBudget:number|undefined;
+export const deviceCacheBudget=()=>observedBudget??cacheBudgetFor(typeof navigator==='undefined'?'':navigator.userAgent);
+export async function refreshDeviceCacheBudget(){
+ try{const estimate=await navigator.storage?.estimate();if(estimate?.quota!==undefined)observedBudget=cacheBudgetFor(navigator.userAgent,estimate.quota)}catch{}
+ return deviceCacheBudget();
+}
 export const assetCacheKey=(scope:string,id:string,bytes:number)=>scope+':'+id+':'+bytes;
 export class DeviceAudioCache{
  persistent:boolean|null=null;

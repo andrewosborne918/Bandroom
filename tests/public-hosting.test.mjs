@@ -71,7 +71,7 @@ test('overall ETA needs observed processing, excludes idle or stale updates and 
  assert.equal(overallRemaining({...p,updatedAt:start+5000},start+5000),undefined);
 });
 
-import {DeviceAudioCache,assetCacheKey,deviceAudioCache,mapAudio} from '../lib/device-audio-cache.ts';
+import {DeviceAudioCache,assetCacheKey,deviceAudioCache,mapAudio,deviceCacheBudget,cacheBudgetFor} from '../lib/device-audio-cache.ts';
 import {authorizePrivateAudio} from '../lib/private-audio.ts';
 class LocalAudioStore{
  entries=new Map();
@@ -126,4 +126,14 @@ test('worker duration accepts fractional verified audio without broadening uploa
  assert.equal(workerDurationLimit(136,136),137);
  assert.equal(workerDurationLimit(327,327.6),328);
  assert.equal(workerDurationLimit(600,600),601);
+});
+
+test('computer cache fits rehearsal sets over 1 GiB, stays bounded by browser quota and retains mobile limits',()=>{
+ const setBytes=1044*1024*1024;
+ assert.ok(cacheBudgetFor('Macintosh')>setBytes);
+ assert.equal(cacheBudgetFor('Macintosh'),8*1024*1024*1024);
+ assert.equal(cacheBudgetFor('Macintosh',2*1024*1024*1024),1024*1024*1024);
+ assert.equal(cacheBudgetFor('iPhone',100*1024*1024*1024),256*1024*1024);
+ assert.equal(cacheBudgetFor('Macintosh',0),0);
+ assert.ok(Number.isFinite(deviceCacheBudget()));
 });

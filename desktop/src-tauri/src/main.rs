@@ -7,7 +7,24 @@ use std::{
     time::Duration,
 };
 use tauri::{Emitter, Manager};
-const ORIGIN: &str = "https://bndrm.vercel.app";
+const DEFAULT_ORIGIN: &str = "https://bndrm.vercel.app";
+fn configured_origin(configured: Option<&str>, development: bool) -> String {
+    if development {
+        if let Some(value) = configured {
+            if let Ok(url) = reqwest::Url::parse(value) {
+                if url.scheme() == "http" && url.host_str() == Some("localhost")
+                    && url.username().is_empty() && url.password().is_none()
+                    && url.path() == "/" && url.query().is_none() && url.fragment().is_none() {
+                    return url.origin().ascii_serialization();
+                }
+            }
+        }
+    }
+    DEFAULT_ORIGIN.to_string()
+}
+fn origin() -> String {
+    configured_origin(std::env::var("BNDRM_ORIGIN").ok().as_deref(), cfg!(debug_assertions))
+}
 #[derive(Default)]
 struct Controller {
     child: Arc<Mutex<Option<Child>>>,
@@ -21,7 +38,7 @@ fn local(window: &tauri::WebviewWindow) -> Result<(), String> {
     }
 }
 fn entry() -> Result<keyring::Entry, String> {
-    keyring::Entry::new("app.bndrm.desktop", "processor")
+    keyring::Entry::new("app.bndrm.desktop", if origin() == DEFAULT_ORIGIN { "processor" } else { "processor-development" })
         .map_err(|_| "Unable to open your computer’s credential vault".into())
 }
 fn saved() -> Result<Value, String> {
@@ -36,7 +53,7 @@ async fn request(path: &str, body: Value) -> Result<Value, String> {
         .build()
         .map_err(|_| "Network setup failed")?;
     let response = client
-        .post(format!("{ORIGIN}/api/desktop/{path}"))
+        .post(format!("{}/api/desktop/{}", origin(), path))
         .json(&body)
         .send()
         .await
@@ -107,12 +124,13 @@ async fn open_band(
 ) -> Result<(), String> {
     local(&window)?;
     let navigate_existing = code.is_some();
+    let base = origin();
     let url = match code {
         Some(c) if c.len() == 10 && c.chars().all(|v| v.is_ascii_hexdigit()) => {
-            format!("{ORIGIN}/?desktop={c}")
+            format!("{base}/?desktop={c}")
         }
         Some(_) => return Err("Invalid connection code".into()),
-        None => format!("{ORIGIN}/"),
+        None => format!("{base}/"),
     };
     if let Some(old) = app.get_webview_window("band") {
         if navigate_existing {
@@ -127,10 +145,11 @@ async fn open_band(
         "band",
         tauri::WebviewUrl::External(url.parse().unwrap()),
     )
+    .initialization_script("window.__BNDRM_DESKTOP__ = true;")
     .title("Bndrm · Library & Session")
     .inner_size(1280.0, 900.0)
     .disable_drag_drop_handler()
-    .on_navigation(|url| url.scheme() == "https" && url.host_str() == Some("bndrm.vercel.app"))
+    .on_navigation(move |url| url.origin().ascii_serialization() == base)
     .build()
     .map_err(|e| e.to_string())?;
     Ok(())
@@ -226,7 +245,7 @@ fn start_processor(
     let mut child = cmd
         .spawn()
         .map_err(|_| "Bundled processor could not start. Reinstall Bndrm Desktop.")?;
-    let config = json!({"url":ORIGIN,"secret":c["secret"],"cache":root.join(c["bandId"].as_str().unwrap_or("band")),"models":root.join("models")});
+    let config = json!({"url":origin(),"secret":c["secret"],"cache":root.join(c["bandId"].as_str().unwrap_or("band")),"models":root.join("models")});
     if child
         .stdin
         .take()
@@ -278,7 +297,7 @@ fn start_processor(
 #[tauri::command]
 async fn open_updates(app: tauri::AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
     local(&window)?;
-    let url = format!("{ORIGIN}/desktop");
+    let url = format!("{}/desktop", origin());
     if let Some(w) = app.get_webview_window("updates") {
         w.set_focus().map_err(|e| e.to_string())?;
     } else {
@@ -287,6 +306,7 @@ async fn open_updates(app: tauri::AppHandle, window: tauri::WebviewWindow) -> Re
             "updates",
             tauri::WebviewUrl::External(url.parse().unwrap()),
         )
+        .initialization_script("window.__BNDRM_DESKTOP__ = true;")
         .title("Bndrm updates")
         .build()
         .map_err(|e| e.to_string())?;
@@ -298,7 +318,18 @@ fn is_open_request(url: &str) -> bool {
 }
 #[cfg(test)]
 mod tests {
-    use super::is_open_request;
+    use super::{is_open_request, configured_origin, DEFAULT_ORIGIN};
+    #[test]
+    fn packaged_app_always_uses_production() {
+        for configured in [None, Some("http://localhost:3000"), Some("https://example.com")] {
+            assert_eq!(configured_origin(configured, false), DEFAULT_ORIGIN);
+        }
+        assert_eq!(configured_origin(None, true), DEFAULT_ORIGIN);
+        assert_eq!(configured_origin(Some("http://localhost:3000/"), true), "http://localhost:3000");
+        for value in ["not a URL", "https://example.com", "http://localhost.evil:3000", "http://user:pass@localhost:3000", "http://localhost:3000/path", "http://localhost:3000?token=x"] {
+            assert_eq!(configured_origin(Some(value), true), DEFAULT_ORIGIN);
+        }
+    }
     #[test]
     fn external_links_can_only_open_the_controller() {
         assert!(is_open_request("bndrm://open"));
