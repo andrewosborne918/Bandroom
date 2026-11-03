@@ -1,6 +1,7 @@
 """Standalone Bndrm worker. Reuses Mac tools, progress and durable checkpoints."""
 import json,os,pathlib,shutil,sys,time,uuid,zipfile
 import requests,soundfile as sf
+from playback import build_playback
 from worker import Worker,NetworkUnavailable,ConnectionRejected,JobUnavailable,CATEGORIES
 
 def verify_audio(source,command):
@@ -12,6 +13,9 @@ def verify_audio(source,command):
     return {'bytes':source.stat().st_size,'duration':float(meta['format']['duration']),'sampleRate':int(meta['streams'][0]['sample_rate'])}
 
 class PublicWorker(Worker):
+    def __init__(self):
+        super().__init__()
+        self.headers['x-bndrm-worker-protocol']='2'
     def call(self,method,path,lease=None,**kw):
         kw['params']={**kw.get('params',{}),'kind':self.active.get('kind','separation')}
         return super().call(method,path,lease,**kw)
@@ -40,7 +44,14 @@ class PublicWorker(Worker):
     def process(self,job,limits):
         self.active=job.copy();self.progress={};root=self.folder(job);self.record(root,job,limits);(root/'paused').unlink(missing_ok=True)
         try:
-            if job['kind']=='export':
+            if job['kind']=='playback':
+                source=root/('original'+pathlib.Path(job['filename']).suffix.lower());target=root/'playback.bna'
+                if not source.exists():self.download(self.call('GET','/'+job['id']+'/input-url',job['lease']).json()['url'],source)
+                if not target.exists():build_playback(source,target)
+                signed=self.call('POST','/'+job['id']+'/output-url',job['lease'],json={'bytes':target.stat().st_size}).json()
+                self.upload(signed['signedUrl'],target,'application/octet-stream')
+                self.call('POST','/'+job['id']+'/finish',job['lease'],json={'bytes':target.stat().st_size})
+            elif job['kind']=='export':
                 archive=root/'stems.zip'
                 if not archive.exists():
                     with zipfile.ZipFile(archive,'w',compression=zipfile.ZIP_STORED) as z:

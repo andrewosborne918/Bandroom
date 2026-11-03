@@ -17,4 +17,5 @@ jobs:
       - run: pnpm build:vercel
         env:
           APP_PLATFORM: supabase
-      - run: python -m py_compile worker/cloud_worker.py worker/entrypoint.py
+      - run: python -m unittest discover -s tests -p playback_test.py
+      - run: python -m py_compile worker/cloud_worker.py worker/entrypoint.py worker/playback.py

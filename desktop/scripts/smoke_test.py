@@ -27,6 +27,11 @@ with tempfile.TemporaryDirectory() as folder:
  invalid=root/'not-audio.mp3';invalid.write_bytes(cover.getvalue())
  rejected=subprocess.run([str(exe),'--verify-audio',str(invalid)],capture_output=True,text=True,timeout=60,env=env)
  assert rejected.returncode!=0,'Artwork without audio must not pass verification'
+ packed=root/'playback.bna'
+ metadata=json.loads(subprocess.check_output([str(exe),'--build-playback',str(source),str(packed)],text=True,timeout=120,env=env))
+ assert metadata['frames']==sr*duration and metadata['codec']=='aac' and len(metadata['segments'])==3
+ assert packed.stat().st_size<source.stat().st_size/3
+ print('Frozen AAC playback conversion preserves source duration and reduces bytes.')
  print('Frozen verifier accepted MP3 artwork and rejected a file without audio.')
  subprocess.run([str(exe),'--demucs','--int24','-n','htdemucs','-d','cpu','-j','1','-o',str(root/'out'),str(source)],check=True,timeout=600,env=env)
  stems=root/'out'/'htdemucs'/'test'
