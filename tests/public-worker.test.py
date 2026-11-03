@@ -5,6 +5,7 @@ sys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[1]/'worker'))
 from cloud_worker import PublicWorker
 from worker import NetworkUnavailable,CATEGORIES
 class Response:
+    status_code=200
     def __init__(self,data=None):self.data=data
     def json(self):return self.data
     def raise_for_status(self):pass
@@ -15,6 +16,12 @@ class WorkerTests(unittest.TestCase):
         self.worker=PublicWorker()
         self.job={'id':'00000000-0000-4000-8000-000000000001','kind':'separation','lease':'lease-a','filename':'mix.wav','max_seconds':1}
     def tearDown(self):self.env.stop();self.temp.cleanup()
+    def test_worker_protocol_is_in_the_authenticated_request_headers(self):
+        captured=[]
+        self.worker.http.request=lambda *args,**kwargs:(captured.append(kwargs) or Response({}))
+        self.worker.call('GET','/queue')
+        self.assertEqual(captured[0]['headers']['x-bndrm-worker-protocol'],'2')
+        self.assertTrue(captured[0]['headers']['Authorization'].startswith('Bearer '))
     def test_delivery_keeps_shared_duration_and_four_deterministic_outputs(self):
         root=self.worker.folder(self.job);sf.write(root/'original.wav',np.zeros((44100,2)),44100)
         stems=root/'out';stems.mkdir()

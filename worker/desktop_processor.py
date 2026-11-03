@@ -7,6 +7,9 @@ def main():
         module='demucs' if sys.argv[1]=='--demucs' else 'analyze'
         sys.argv=[module,*sys.argv[2:]]
         runpy.run_module(module,run_name='__main__');return
+    if len(sys.argv)>1 and sys.argv[1]=='--build-playback':
+        from playback import build_playback
+        print(json.dumps(build_playback(pathlib.Path(sys.argv[2]),pathlib.Path(sys.argv[3]))),flush=True);return
     if len(sys.argv)>1 and sys.argv[1]=='--verify-audio':
         import subprocess
         from cloud_worker import verify_audio

@@ -1,3 +1,5 @@
+import {outputAudioTime} from './audio-clock.ts';
+import {playbackIndex,packedStream} from './packed-audio.ts';
 import {WavStream,wavHeader,type AudioRange} from './wav-stream.ts';
 import {safeLoop,transportPosition} from './rehearsal.ts';
 import {audioCacheKey,decodedAudioCache,deviceAudioBudget} from './audio-cache.ts';
@@ -10,19 +12,19 @@ export class BandAudio {
   bufferKeys=new Map<string,string>();
   streams=new Map<string,WavStream>();private streamStops:(()=>void)[]=[];
   onStreamError:(error:Error)=>void=()=>{};
-  async loadWav(songId:string,stem:import('./types').Stem,read:AudioRange,retain:()=>boolean=()=>true){
-    if(this.hasStem(songId,stem))return;
+  async loadWav(songId:string,stem:import('./types').Stem,read:AudioRange,retain:()=>boolean=()=>true,packedBytes?:number){
+    const key=audioCacheKey(songId,stem)+(packedBytes?':aac':'');if(this.bufferKeys.get(stem.id)===key&&this.streams.has(stem.id))return;
     if(!this.context)this.context=new AudioContext({latencyHint:'interactive'});
-    const header=await wavHeader(read,stem.bytes);if(this.streamingBytes+Math.min(24,header.duration)*header.channels*header.sampleRate*4>deviceAudioBudget())throw Error('This high-resolution arrangement exceeds this device’s audio memory. Reduce its tracks or use a computer.');const stream=new WavStream(this.context,header,read);
-    await stream.prepare(0);if(!retain()){stream.clear();return}this.streams.get(stem.id)?.clear();this.streams.set(stem.id,stream);this.bufferKeys.set(stem.id,audioCacheKey(songId,stem));
+    const index=packedBytes?await playbackIndex(read,packedBytes):null;const header=index?{duration:index.frames/index.sampleRate,channels:index.channels,sampleRate:index.sampleRate}:await wavHeader(read,stem.bytes);if(this.streamingBytes+Math.min(24,header.duration)*header.channels*Math.max(header.sampleRate,this.context.sampleRate)*4>deviceAudioBudget())throw Error('This high-resolution arrangement exceeds this device’s audio memory. Reduce its tracks or use a computer.');const stream=index?packedStream(this.context,index,read):new WavStream(this.context,header as import('./wav-stream.ts').WavHeader,read);
+    await stream.prepare(0);if(!retain()){stream.clear();return}this.streams.get(stem.id)?.clear();this.streams.set(stem.id,stream);this.bufferKeys.set(stem.id,key);
   }
   releaseExcept(keep:Set<string>){for(const id of this.buffers.keys())if(!keep.has(id)){this.buffers.delete(id);this.bufferKeys.delete(id)}for(const [id,stream] of this.streams)if(!keep.has(id)){stream.clear();this.streams.delete(id);this.bufferKeys.delete(id)}}
-  get streamingBytes(){return [...this.streams.values()].reduce((n,stream)=>n+Math.min(24,stream.header.duration)*stream.header.channels*stream.header.sampleRate*4,0)}
+  get streamingBytes(){return [...this.streams.values()].reduce((n,stream)=>n+Math.min(24,stream.header.duration)*stream.header.channels*Math.max(stream.header.sampleRate,this.context?.sampleRate||0)*4,0)}
   clearAudio(){this.releaseExcept(new Set());this.bufferKeys.clear()}
-  async preparePlayback(song:Song,t:Transport){const position=transportPosition(t,Math.max(t.startAt,this.now()+100),song.duration);await Promise.all(song.stems.map(async stem=>{const stream=this.streams.get(stem.id);if(!stream)return;await stream.prepare(Math.max(0,position-(stem.offset||0)));const loop=safeLoop(t.loop,song.duration);if(loop)await stream.prepare(Math.max(0,loop.start-(stem.offset||0)),Math.min(8,loop.end-loop.start))}))}
+  async preparePlayback(song:Song,t:Transport){const position=t.status==='preparing'?t.offset:transportPosition(t,Math.max(t.startAt,this.now()+100),song.duration);await Promise.all(song.stems.map(async stem=>{const stream=this.streams.get(stem.id);if(!stream)return;await stream.prepare(Math.max(0,position-(stem.offset||0)));const loop=safeLoop(t.loop,song.duration);if(loop)await stream.prepare(Math.max(0,loop.start-(stem.offset||0)),Math.min(8,loop.end-loop.start))}))}
 
   async loadStem(songId:string,stem:import('./types').Stem,loader:()=>Promise<ArrayBuffer>,retain:()=>boolean=()=>true,background=false){const key=audioCacheKey(songId,stem);if(this.bufferKeys.get(stem.id)===key&&this.buffers.has(stem.id))return this.buffers.get(stem.id)!;const buffer=await decodedAudioCache.load(key,async()=>this.decode(await loader(),!background),deviceAudioBudget());if(retain()){this.buffers.set(stem.id,buffer);this.bufferKeys.set(stem.id,key)}return buffer;}
-  hasStem(songId:string,stem:import('./types').Stem){return (this.buffers.has(stem.id)||this.streams.has(stem.id))&&this.bufferKeys.get(stem.id)===audioCacheKey(songId,stem);}
+  hasStem(songId:string,stem:import('./types').Stem){return (this.buffers.has(stem.id)||this.streams.has(stem.id))&&[audioCacheKey(songId,stem),audioCacheKey(songId,stem)+':aac'].includes(this.bufferKeys.get(stem.id)||'');}
   sources:AudioBufferSourceNode[]=[];
   effects:AudioNode[]=[];
   private rateOutput:AudioNode|null=null;
@@ -55,11 +57,13 @@ export class BandAudio {
     if(this.split&&!this.audience){const mono=ctx.createGain();mono.channelCount=1;mono.channelCountMode='explicit';const merge=ctx.createChannelMerger(2);node.connect(mono);mono.connect(merge,0,click?1:0);merge.connect(this.rateOutput||ctx.destination);}
     else node.connect(this.rateOutput||ctx.destination);
   }
-  audioTime(serverMs:number){return this.context!.currentTime+(serverMs-this.now())/1000-this.latency+this.adjustment/1000;}
+  private startTarget=0;
+  audioTime(serverMs:number){return outputAudioTime(this.context!,serverMs,this.now(),performance.now(),this.adjustment)}
+  driftMs(t:Transport){return this.run===t.run&&this.ready?1000*(this.audioTime(t.startAt)-this.startTarget):0}
   start(song:Song,t:Transport){
     this.stop();this.run=t.run;this.song=song;this.transport=t;
     if(t.status!=='playing'||!this.ready)return;
-    const rate=t.rate||1,loop=safeLoop(t.loop,song.duration);if(rate!==1&&!this.pitchFactory)throw Error('Prepare practice speed before playback');const ctx=this.context!;if(rate!==1){this.rateOutput=this.pitchFactory!(ctx,rate);this.rateOutput.connect(ctx.destination);this.effects.push(this.rateOutput)}const target=this.audioTime(t.startAt),when=Math.max(ctx.currentTime+.03,target),offset=transportPosition(t,t.startAt+Math.max(0,when-target)*1000,song.duration);
+    const rate=t.rate||1,loop=safeLoop(t.loop,song.duration);if(rate!==1&&!this.pitchFactory)throw Error('Prepare practice speed before playback');const ctx=this.context!;if(rate!==1){this.rateOutput=this.pitchFactory!(ctx,rate);this.rateOutput.connect(ctx.destination);this.effects.push(this.rateOutput)}const target=this.audioTime(t.startAt);this.startTarget=target;const when=Math.max(ctx.currentTime+.03,target),offset=transportPosition(t,t.startAt+Math.max(0,when-target)*1000,song.duration);
     if(offset<song.duration){
       for(const stem of song.stems){
         if(this.audience&&restricted(stem))continue;const privateStem=restricted(stem);
