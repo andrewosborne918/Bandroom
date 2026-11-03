@@ -3,6 +3,14 @@ import json,os,pathlib,shutil,sys,time,uuid,zipfile
 import requests,soundfile as sf
 from worker import Worker,NetworkUnavailable,ConnectionRejected,JobUnavailable,CATEGORIES
 
+def verify_audio(source,command):
+    # Cover art is a video stream. Verify only the first audio stream so a valid
+    # MP3 with artwork never needs a video decoder or encoder.
+    command(['ffmpeg','-v','error','-i',str(source),'-map','0:a:0','-vn','-sn','-dn','-f','null','-'],'beats')
+    import subprocess
+    meta=json.loads(subprocess.check_output(['ffprobe','-v','error','-select_streams','a:0','-show_entries','stream=sample_rate:format=duration','-of','json',str(source)],text=True))
+    return {'bytes':source.stat().st_size,'duration':float(meta['format']['duration']),'sampleRate':int(meta['streams'][0]['sample_rate'])}
+
 class PublicWorker(Worker):
     def call(self,method,path,lease=None,**kw):
         kw['params']={**kw.get('params',{}),'kind':self.active.get('kind','separation')}
@@ -47,10 +55,7 @@ class PublicWorker(Worker):
                 source=root/('original'+pathlib.Path(job['filename']).suffix.lower())
                 if not source.exists():self.download(self.call('GET','/'+job['id']+'/input-url',job['lease']).json()['url'],source)
                 if job['kind']=='verification':
-                    self.command(['ffmpeg','-v','error','-i',str(source),'-f','null','-'],'beats')
-                    import subprocess
-                    meta=json.loads(subprocess.check_output(['ffprobe','-v','error','-select_streams','a:0','-show_entries','stream=sample_rate:format=duration','-of','json',str(source)],text=True))
-                    self.call('POST','/'+job['id']+'/finish',job['lease'],json={'bytes':source.stat().st_size,'duration':float(meta['format']['duration']),'sampleRate':int(meta['streams'][0]['sample_rate'])})
+                    self.call('POST','/'+job['id']+'/finish',job['lease'],json=verify_audio(source,self.command))
                 else:
                     stems,analysis=self.prepare(job,limits,root);outputs=[]
                     self.set_progress('uploading',0)
@@ -66,7 +71,8 @@ class PublicWorker(Worker):
         except (NetworkUnavailable,ConnectionRejected,JobUnavailable):raise
         except Exception as error:
             print('Processing failed: '+type(error).__name__+'. Local results retained.',flush=True)
-            self.call('POST','/'+job['id']+'/finish',job['lease'],json={'error':'Audio processing failed: '+type(error).__name__})
+            message='The audio track could not be read. Export this recording as WAV or MP3 and upload it again.' if job['kind']=='verification' else 'Audio processing could not finish. Retry processing; if it fails again, upload a WAV copy.'
+            self.call('POST','/'+job['id']+'/finish',job['lease'],json={'error':message})
             (root/'paused').write_text('Use Retry in Bndrm')
         finally:self.active={}
     def pending(self):

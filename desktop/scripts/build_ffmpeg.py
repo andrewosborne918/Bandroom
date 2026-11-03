@@ -1,9 +1,18 @@
 """Build a minimal LGPL FFmpeg with native WAV/MP3/M4A/AAC decoding and no external codecs."""
-import hashlib,json,os,pathlib,shutil,subprocess,tarfile,urllib.request
+import hashlib,json,os,pathlib,shutil,subprocess,tarfile,urllib.request,urllib.error,time
 root=pathlib.Path(__file__).resolve().parents[1]/'build';root.mkdir(exist_ok=True)
 archive=root/'ffmpeg-7.1.1.tar.xz';expected='733984395e0dbbe5c046abda2dc49a5544e7e0e1e2366bba849222ae9e3a03b1'
 if not archive.exists():
- with urllib.request.urlopen('https://ffmpeg.org/releases/'+archive.name,timeout=120) as response,archive.open('wb') as out:shutil.copyfileobj(response,out)
+ partial=archive.with_suffix('.part')
+ for attempt in range(3):
+  try:
+   with urllib.request.urlopen('https://ffmpeg.org/releases/'+archive.name,timeout=45) as response,partial.open('wb') as out:shutil.copyfileobj(response,out)
+   if hashlib.sha256(partial.read_bytes()).hexdigest()!=expected:raise RuntimeError('FFmpeg source checksum mismatch')
+   partial.replace(archive);break
+  except (urllib.error.URLError,TimeoutError,ConnectionError):
+   partial.unlink(missing_ok=True)
+   if attempt==2:raise
+   time.sleep(2**attempt)
 if hashlib.sha256(archive.read_bytes()).hexdigest()!=expected:raise RuntimeError('FFmpeg source checksum mismatch')
 source=root/'ffmpeg-7.1.1'
 if not source.exists():

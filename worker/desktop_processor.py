@@ -7,6 +7,11 @@ def main():
         module='demucs' if sys.argv[1]=='--demucs' else 'analyze'
         sys.argv=[module,*sys.argv[2:]]
         runpy.run_module(module,run_name='__main__');return
+    if len(sys.argv)>1 and sys.argv[1]=='--verify-audio':
+        import subprocess
+        from cloud_worker import verify_audio
+        result=verify_audio(pathlib.Path(sys.argv[2]),lambda args,stage:subprocess.run(args,check=True,stdout=subprocess.DEVNULL))
+        print(json.dumps(result),flush=True);return
     if len(sys.argv)>1 and sys.argv[1]=='--self-test':
         import torch,torchaudio,librosa,whisper,soundfile,subprocess
         for binary in ('ffmpeg','ffprobe'):subprocess.check_call([binary,'-version'],stdout=subprocess.DEVNULL)
