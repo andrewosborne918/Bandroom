@@ -16,3 +16,23 @@ test.after(()=>db.close());
 
 test('preparation buffers the requested seek position, rather than elapsed wall-clock time',async()=>{const engine=new BandAudio(),positions=[];engine.now=()=>1000000000;engine.streams.set('stem',{prepare:async position=>positions.push(position)});await engine.preparePlayback({duration:200,stems:[{id:'stem',offset:2}]},{status:'preparing',run:'seek',offset:60,startAt:0,countIn:2});assert.deepEqual(positions,[58])});
 test('device drift detects a clock correction against the original scheduled start',()=>{const engine=new BandAudio();engine.context={currentTime:10,state:'running',outputLatency:0};engine.run='run';engine.startTarget=10;engine.now=()=>200000;const transport={run:'run',startAt:200000};assert.equal(engine.driftMs(transport),0);engine.now=()=>200080;assert.ok(Math.abs(engine.driftMs(transport)+80)<1e-9);assert.equal(engine.driftMs({...transport,run:'old-run'}),0)});
+
+test('audio enable rejects an interrupted output instead of claiming readiness',async()=>{
+ const engine=new BandAudio();engine.context={state:'interrupted',resume:async()=>{}};
+ await assert.rejects(engine.arm(),/interrupted/);assert.equal(engine.ready,false);
+ assert.throws(()=>engine.start({stems:[]},{status:'playing',run:'silent'}),/interrupted/);
+});
+test('reconnecting output replaces the old context and invalidates its stream cache',async()=>{
+ const prior=globalThis.AudioContext;let oldClosed=false,cleared=false;
+ globalThis.AudioContext=class{state='suspended';resume(){this.state='running';return Promise.resolve()}};
+ const engine=new BandAudio();engine.context={state:'running',close:async()=>{oldClosed=true}};
+ engine.streams.set('old',{clear:()=>{cleared=true}});engine.bufferKeys.set('old','cached');
+ try{await engine.reconnectOutput();assert.equal(oldClosed,true);assert.equal(cleared,true);assert.equal(engine.streams.size,0);assert.equal(engine.bufferKeys.size,0);assert.equal(engine.ready,true)}finally{globalThis.AudioContext=prior}
+});
+test('sound check bypasses a muted monitor mix and uses a bounded low-volume tone',async()=>{
+ const engine=new BandAudio(),levels=[],times=[];let connected,disconnected=false;
+ const gain={gain:{setValueAtTime:v=>levels.push(v),linearRampToValueAtTime:v=>levels.push(v)},connect:to=>{connected=to},disconnect(){}};
+ const tone={frequency:{value:0},connect(){},disconnect(){disconnected=true},start:t=>times.push(t),stop:t=>times.push(t)};
+ engine.context={state:'running',currentTime:10,destination:{speaker:true},resume:async()=>{},createOscillator:()=>tone,createGain:()=>gain};engine.stems=false;engine.click=false;
+ await engine.testOutput();assert.equal(connected,engine.context.destination);assert.deepEqual(levels,[0,.06,0]);assert.ok(times[1]-times[0]<=.51);tone.onended();assert.equal(disconnected,true);
+});

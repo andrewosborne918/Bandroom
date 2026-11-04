@@ -15,8 +15,9 @@ export class BandAudio {
   async loadWav(songId:string,stem:import('./types').Stem,read:AudioRange,retain:()=>boolean=()=>true,packedBytes?:number){
     const key=audioCacheKey(songId,stem)+(packedBytes?':aac':'');if(this.bufferKeys.get(stem.id)===key&&this.streams.has(stem.id))return;
     if(!this.context)this.context=new AudioContext({latencyHint:'interactive'});
-    const index=packedBytes?await playbackIndex(read,packedBytes):null;const header=index?{duration:index.frames/index.sampleRate,channels:index.channels,sampleRate:index.sampleRate}:await wavHeader(read,stem.bytes);if(this.streamingBytes+Math.min(24,header.duration)*header.channels*Math.max(header.sampleRate,this.context.sampleRate)*4>deviceAudioBudget())throw Error('This high-resolution arrangement exceeds this device’s audio memory. Reduce its tracks or use a computer.');const stream=index?packedStream(this.context,index,read):new WavStream(this.context,header as import('./wav-stream.ts').WavHeader,read);
-    await stream.prepare(0);if(!retain()){stream.clear();return}this.streams.get(stem.id)?.clear();this.streams.set(stem.id,stream);this.bufferKeys.set(stem.id,key);
+    const context=this.context;
+    const index=packedBytes?await playbackIndex(read,packedBytes):null;const header=index?{duration:index.frames/index.sampleRate,channels:index.channels,sampleRate:index.sampleRate}:await wavHeader(read,stem.bytes);if(this.streamingBytes+Math.min(24,header.duration)*header.channels*Math.max(header.sampleRate,context.sampleRate)*4>deviceAudioBudget())throw Error('This high-resolution arrangement exceeds this device’s audio memory. Reduce its tracks or use a computer.');const stream=index?packedStream(context,index,read):new WavStream(context,header as import('./wav-stream.ts').WavHeader,read);
+    await stream.prepare(0);if(!retain()||this.context!==context){stream.clear();return}this.streams.get(stem.id)?.clear();this.streams.set(stem.id,stream);this.bufferKeys.set(stem.id,key);
   }
   releaseExcept(keep:Set<string>){for(const id of this.buffers.keys())if(!keep.has(id)){this.buffers.delete(id);this.bufferKeys.delete(id)}for(const [id,stream] of this.streams)if(!keep.has(id)){stream.clear();this.streams.delete(id);this.bufferKeys.delete(id)}}
   get streamingBytes(){return [...this.streams.values()].reduce((n,stream)=>n+Math.min(24,stream.header.duration)*stream.header.channels*Math.max(stream.header.sampleRate,this.context?.sampleRate||0)*4,0)}
@@ -46,7 +47,34 @@ export class BandAudio {
   now=()=>Date.now();
   audience=false; generatedClick=true; cues=true; click=false; clickVolume=.35; stems=false; split=false; adjustment=0;
   nextBeat=0; song:Song|null=null; transport:Transport|null=null;
-  async arm(){ if(!this.context) this.context=new AudioContext({latencyHint:'interactive'}); await this.context.resume(); }
+  async arm(){
+    if(!this.context)this.context=new AudioContext({latencyHint:'interactive'});
+    const context=this.context;
+    let timer:ReturnType<typeof setTimeout>|undefined;
+    try{await Promise.race([context.resume(),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(Error('Audio did not start. Tap Enable audio or reconnect this device’s audio output.')),4000)})]);}
+    finally{if(timer)clearTimeout(timer)}
+    if(context.state!=='running')throw Error('Audio is interrupted. Reconnect this device’s audio output.');
+  }
+  async reconnectOutput(){
+    const previous=this.context;
+    // Create/resume inside the button gesture, before awaiting any network work.
+    this.stop();this.clearAudio();this.pitchFactory=null;
+    this.context=new AudioContext({latencyHint:'interactive'});
+    void previous?.close().catch(()=>{});
+    await this.arm();
+  }
+  async testOutput(){
+    await this.arm();
+    const context=this.context!,tone=context.createOscillator(),gain=context.createGain();
+    const at=context.currentTime+.03;
+    tone.frequency.value=523.25;
+    gain.gain.setValueAtTime(0,at);
+    gain.gain.linearRampToValueAtTime(.06,at+.02);
+    gain.gain.linearRampToValueAtTime(0,at+.45);
+    tone.connect(gain);gain.connect(context.destination);
+    tone.onended=()=>{tone.disconnect();gain.disconnect()};
+    tone.start(at);tone.stop(at+.5);
+  }
   get ready(){return this.context?.state==='running';}
   get latency(){return this.context?.outputLatency||this.context?.baseLatency||0;}
   async decode(data:ArrayBuffer,activate=true){ if(activate)await this.arm();else if(!this.context)this.context=new AudioContext({latencyHint:'interactive'});return await this.context!.decodeAudioData(data); }
@@ -62,7 +90,8 @@ export class BandAudio {
   driftMs(t:Transport){return this.run===t.run&&this.ready?1000*(this.audioTime(t.startAt)-this.startTarget):0}
   start(song:Song,t:Transport){
     this.stop();this.run=t.run;this.song=song;this.transport=t;
-    if(t.status!=='playing'||!this.ready)return;
+    if(t.status!=='playing')return;
+    if(!this.ready)throw Error('Audio output is interrupted. Enable audio or reconnect this device’s output.');
     const rate=t.rate||1,loop=safeLoop(t.loop,song.duration);if(rate!==1&&!this.pitchFactory)throw Error('Prepare practice speed before playback');const ctx=this.context!;if(rate!==1){this.rateOutput=this.pitchFactory!(ctx,rate);this.rateOutput.connect(ctx.destination);this.effects.push(this.rateOutput)}const target=this.audioTime(t.startAt);this.startTarget=target;const when=Math.max(ctx.currentTime+.03,target),offset=transportPosition(t,t.startAt+Math.max(0,when-target)*1000,song.duration);
     if(offset<song.duration){
       for(const stem of song.stems){
