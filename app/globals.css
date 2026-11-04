@@ -70,3 +70,43 @@ body{line-height:1.5}h1,h2,h3{color:#1E4D3A}input,select,textarea{accent-color:#
 .storage-shortcut{display:flex;align-items:center;gap:6px;border:0;background:transparent;color:#1E4D3A;padding:8px;font-size:12px;white-space:nowrap;cursor:pointer}.storage-shortcut:hover{text-decoration:underline}.storage-card{padding:20px;border:1px solid #A8C5B0;background:#EAF0E8;border-radius:12px;margin:18px 0}.storage-card-heading,.storage-card-total{display:flex;justify-content:space-between;align-items:center;gap:12px}.storage-card-heading>span{display:flex;align-items:center;gap:8px;font-weight:650;color:#1E4D3A}.storage-card-heading small{font-size:11px;border:1px solid #A8C5B0;border-radius:20px;padding:3px 9px}.storage-card-total{align-items:baseline;margin:18px 0 12px;flex-wrap:wrap}.storage-card-total strong{font-size:23px;color:#1E4D3A}.storage-card-total>span,.storage-card>p{font-size:12px;color:#6B6560}.storage-card progress{appearance:none;width:100%;height:8px;display:block;border:0;border-radius:8px;overflow:hidden;background:#D6DFD2;accent-color:#1E4D3A}.storage-card progress::-webkit-progress-bar{background:#D6DFD2;border-radius:8px}.storage-card progress::-webkit-progress-value{background:#1E4D3A;border-radius:8px}.storage-card progress::-moz-progress-bar{background:#1E4D3A;border-radius:8px}.storage-near-limit{border-color:#BC9160;background:#FAF0E2}.storage-card .storage-warning{color:#854D1F;font-weight:600}@media(max-width:680px){.platform-bar .storage-shortcut{order:5;width:100%;padding:2px 0 6px;justify-content:flex-end;font-size:11px}.storage-card{padding:16px}.storage-card-total strong{font-size:21px}}
 
 .open-desktop{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:12px 0}.open-desktop .form-hint{flex-basis:100%;margin:4px 0}.processing-queue .preparation-title{flex-wrap:wrap}.song-review{line-height:1.5}
+
+/* Keep dialogs inside Safari's visible area, including its keyboard/toolbars. */
+.modal-backdrop{
+  inset:var(--modal-top,0px) 0 auto;
+  height:var(--modal-height,100dvh);
+  min-height:0;
+  padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));
+  overflow:hidden;
+  overscroll-behavior:none;
+}
+.modal{
+  min-width:0;
+  min-height:0;
+  max-height:100%;
+  padding:0 24px 24px;
+  overflow-y:auto;
+  overscroll-behavior-y:contain;
+  overflow-wrap:anywhere;
+  scroll-padding-block:88px 24px;
+  -webkit-overflow-scrolling:touch;
+}
+.modal-heading{
+  position:sticky;
+  top:0;
+  z-index:6;
+  padding:20px 0 16px;
+  background:var(--bg);
+  border-bottom:1px solid var(--line);
+}
+.modal-heading .icon-button{flex-shrink:0}
+.modal.prepare-workspace{height:100%;max-width:100%;max-height:100%!important}
+.prepare-workspace .modal-heading{top:-20px;margin-top:-20px}
+@media(max-width:650px){
+  .modal{padding:0 18px 20px;max-height:100%}
+  .modal-heading{padding-top:16px}
+  .modal input:not([type=range]),.modal select,.modal textarea,.platform-auth input{font-size:16px}
+  .modal .form-grid{min-width:0}
+  .modal .form-grid>*{min-width:0}
+  .modal.prepare-workspace{width:100%;border-radius:14px}
+}
