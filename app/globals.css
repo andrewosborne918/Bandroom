@@ -81,6 +81,15 @@ body{line-height:1.5}h1,h2,h3{color:#1E4D3A}input,select,textarea{accent-color:#
 .performance .content{padding-top:24px}
 .sound-check{padding:0 0 20px;border-bottom:1px solid var(--line)}
 .sound-check h3{margin-top:0}
+.chart-timing-entry{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:10px 0 16px}.chart-timing-entry small{line-height:1.6}
+.chart-timing-controls{padding:18px;margin:12px 0;border:1px solid var(--green);border-radius:12px;background:var(--bg);font-size:13px;color:var(--text)}
+.chart-timing-controls p{line-height:1.6;margin:10px 0}.chart-timing-controls small{display:block;line-height:1.6;color:var(--muted)}
+.chart-timing-controls label{display:flex;align-items:center;gap:10px;margin:12px 0}.chart-timing-controls select{width:auto;padding:8px;border:1px solid var(--line);border-radius:8px;color:var(--text);background:var(--panel)}
+.timing-actions,.timing-section-targets{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.timing-actions .button,.timing-section-targets .button{white-space:normal;text-align:left;overflow-wrap:anywhere}
+.timing-row-time{display:block!important;font-size:11px;color:var(--muted);letter-spacing:0;font-weight:500;margin-bottom:6px}.next-timing-target{outline:2px dashed var(--green);outline-offset:-2px}
+.marking-timing{scroll-behavior:auto}.marking-timing [role=button]{cursor:crosshair}
+.chart-panel:has(.chart-timing-controls) .section-tabs,.chart-panel:has(.chart-timing-controls) .section-restart{display:none}
+@media(max-width:650px){.chart-timing-controls{padding:14px}.chart-timing-controls select{font-size:16px}.timing-actions .button,.timing-section-targets .button{font-size:12px;padding:8px 10px}.chart-timing-entry .button{width:100%}}
 .guitar-tuning-fields{margin:18px 0;padding:18px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
 .tuning-strings{margin:0;font-size:14px;line-height:1.8}.tuning-strings small{display:block}
 .guitar-tuning-badge{display:inline-flex;align-items:center;gap:7px;max-width:100%;margin-top:10px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;color:var(--green);background:var(--bg);font-size:12px;line-height:1.5;overflow-wrap:anywhere}
