@@ -72,6 +72,18 @@ body{line-height:1.5}h1,h2,h3{color:#1E4D3A}input,select,textarea{accent-color:#
 .open-desktop{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:12px 0}.open-desktop .form-hint{flex-basis:100%;margin:4px 0}.processing-queue .preparation-title{flex-wrap:wrap}.song-review{line-height:1.5}
 
 /* Keep dialogs inside Safari's visible area, including its keyboard/toolbars. */
+.session-connection{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:18px 32px 0;padding:16px 20px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--text)}
+.session-connection>div{flex:1;min-width:min(100%,240px)}
+.session-connection strong{display:flex;align-items:center;gap:8px;font-size:14px}
+.session-connection p,.sound-check p{font-size:12px;line-height:1.6;margin:6px 0 0;color:var(--muted)}
+.session-connection .button{white-space:normal;text-align:left}
+.session-connection.joined{border-left:4px solid var(--green)}
+.performance .content{padding-top:24px}
+.sound-check{padding:0 0 20px;border-bottom:1px solid var(--line)}
+.sound-check h3{margin-top:0}
+.stage-dark .modal{--bg:#f7f5ef;--panel:#fffefa;--text:#222c27;--muted:#68736a;--line:#e0e5dc;--green:#245942;--accent:#245942;--orange:var(--accent);color:var(--text)}
+.stage-dark .modal .subtle,.stage-dark .modal select{background:var(--bg);color:var(--text)}
+@media(max-width:650px){.session-connection{margin:12px;padding:14px;gap:8px}.session-connection>div{flex-basis:100%}.session-connection .button{font-size:12px;padding:8px 10px}.performance .content{padding-top:12px}}
 .modal-backdrop{
   inset:var(--modal-top,0px) 0 auto;
   height:var(--modal-height,100dvh);
