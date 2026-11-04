@@ -81,6 +81,11 @@ body{line-height:1.5}h1,h2,h3{color:#1E4D3A}input,select,textarea{accent-color:#
 .performance .content{padding-top:24px}
 .sound-check{padding:0 0 20px;border-bottom:1px solid var(--line)}
 .sound-check h3{margin-top:0}
+.guitar-tuning-fields{margin:18px 0;padding:18px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.tuning-strings{margin:0;font-size:14px;line-height:1.8}.tuning-strings small{display:block}
+.guitar-tuning-badge{display:inline-flex;align-items:center;gap:7px;max-width:100%;margin-top:10px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;color:var(--green);background:var(--bg);font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+.guitar-tuning-badge svg{flex-shrink:0}.guitar-tuning-badge.compact{padding:3px 6px;font-size:10px;margin-top:6px}
+.tuning-notes{white-space:normal}
 .stage-dark .modal{--bg:#f7f5ef;--panel:#fffefa;--text:#222c27;--muted:#68736a;--line:#e0e5dc;--green:#245942;--accent:#245942;--orange:var(--accent);color:var(--text)}
 .stage-dark .modal .subtle,.stage-dark .modal select{background:var(--bg);color:var(--text)}
 @media(max-width:650px){.session-connection{margin:12px;padding:14px;gap:8px}.session-connection>div{flex-basis:100%}.session-connection .button{font-size:12px;padding:8px 10px}.performance .content{padding-top:12px}}
