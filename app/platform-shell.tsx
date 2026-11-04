@@ -1,5 +1,6 @@
 'use client';
 import {useEffect,useState} from 'react';
+import {useModalViewport} from '../lib/use-modal-viewport';
 import Image from 'next/image';
 import InvitationDelivery from './invitation-delivery';
 import {deviceAudioCache} from '../lib/device-audio-cache';
@@ -11,6 +12,7 @@ import StorageUsage from './storage-usage';
 import {Users,Music2,Settings2,X,Shield,LogOut} from 'lucide-react';
 const bytes=(n:number)=>((n||0)/1024/1024/1024).toFixed(2)+' GB';
 export default function PlatformShell(){const [config,setConfig]=useState<any>(null),[me,setMe]=useState<any>(null),[workspace,setWorkspace]=useState<any>(null),[band,setBand]=useState(''),[panel,setPanel]=useState<'workspace'|'account'|'admin'|null>(null),[adminData,setAdminData]=useState<any>(null),[mode,setMode]=useState('login'),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[displayName,setDisplayName]=useState(''),[bandName,setBandName]=useState(''),[inviteEmail,setInviteEmail]=useState(''),[inviteRole,setInviteRole]=useState('member'),[inviteUrl,setInviteUrl]=useState(''),[invite,setInvite]=useState(''),[inviteAuth,setInviteAuth]=useState<{hash:string;type:string}|null>(null),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[confirmation,setConfirmation]=useState(''),[sessionKey,setSessionKey]=useState(0);
+ useModalViewport(panel !== null);
  useEffect(()=>{const open=()=>setPanel('workspace');window.addEventListener('bndrm-open-processors',open);return()=>window.removeEventListener('bndrm-open-processors',open)},[]);
  async function api(path:string,method='GET',data?:unknown){const r=await fetch('/api/platform/'+path,{method,headers:data?{'Content-Type':'application/json'}:{},body:data?JSON.stringify(data):undefined});const b:any=await r.json();if(!r.ok)throw Error(b.error);return b}
  async function work(fn:()=>Promise<void>){setBusy(true);setMessage('');try{await fn()}catch(e:any){setMessage(e.message)}finally{setBusy(false)}}

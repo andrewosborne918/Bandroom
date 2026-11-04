@@ -1,4 +1,5 @@
 'use client';
+import {useModalViewport} from '../lib/use-modal-viewport';
 import {clockSample,calibratedClock} from '../lib/audio-clock';
 import Image from 'next/image';
 import LibraryWorkspace from './rehearsal/library-workspace';
@@ -52,6 +53,7 @@ export default function Bndrm({cloud=false,canEdit=true,cacheScope='',workspaceN
   const [deleteTarget,setDeleteTarget]=useState<Song|null>(null);
   const [session,setSession]=useState<Session|null>(null),[cred,setCred]=useState<Cred|null>(null),[localTransport,setLocalTransport]=useState<Transport>(stopped);
   const [modal,setModal]=useState<'song'|'import'|'session'|'join'|'help'|'settings'|'library'|'delete'|null>(null),[editor,setEditor]=useState<Song|null>(null),[files,setFiles]=useState<File[]>([]);
+  useModalViewport(modal !== null);
   const [name,setName]=useState(displayName),[instrument,setInstrument]=useState('Guitar'),[sessionName,setSessionName]=useState('Friday night rehearsal'),[joinCode,setJoinCode]=useState('');
   const [joinRole,setJoinRole]=useState<'musician'|'audience'>('musician'),[leaderTracks,setLeaderTracks]=useState(true);
   const [followReset,setFollowReset]=useState(0);
