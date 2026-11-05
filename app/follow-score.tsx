@@ -7,7 +7,7 @@ import {stampChartTime,chartTimingProblems} from '../lib/manual-chart-timing';
 import {lyricsOnly} from '../lib/song-charts';
 import {formatTime} from '../lib/timeline';
 import ChordLine from './chord-line';
-export default function FollowScore({song,sectionIndex,view,instrument,position,following,fontSize,transposeBy,showChords,showLyrics,canEdit,canTime,onSave,onStart,onFollow,followReset,readPosition,onDirtyChange,timingReset}:{song:Song;sectionIndex:number;view:string;instrument:string;position:number;following:boolean;fontSize:number;transposeBy:number;showChords:boolean;showLyrics:boolean;canEdit:boolean;canTime:boolean;onSave:(song:Song)=>Promise<void>;onStart:(at:number)=>Promise<void>;onFollow:()=>void;followReset:number;readPosition:()=>number;onDirtyChange:(dirty:boolean)=>void;timingReset:number}){
+export default function FollowScore({song,sectionIndex,view,instrument,position,following,fontSize,transposeBy,showChords,showLyrics,canEdit,canTime,timingToolsVisible=true,onSave,onStart,onFollow,followReset,readPosition,onDirtyChange,timingReset}:{song:Song;sectionIndex:number;view:string;instrument:string;position:number;following:boolean;fontSize:number;transposeBy:number;showChords:boolean;showLyrics:boolean;canEdit:boolean;canTime:boolean;timingToolsVisible?:boolean;onSave:(song:Song)=>Promise<void>;onStart:(at:number)=>Promise<void>;onFollow:()=>void;followReset:number;readPosition:()=>number;onDirtyChange:(dirty:boolean)=>void;timingReset:number}){
  const [draft,setDraft]=useState<Song|null>(null),[history,setHistory]=useState<Song[]>([]),[scope,setScope]=useState('sections'),[next,setNext]=useState(0),[saving,setSaving]=useState(false),[status,setStatus]=useState('');
  const scoreSong=draft||song,rows=useMemo(()=>automaticScore(scoreSong,view,instrument),[scoreSong,view,instrument]),active=activeFollowRow(rows,position),container=useRef<HTMLDivElement>(null),[browsing,setBrowsing]=useState(false),[error,setError]=useState('');
  const targets=useMemo(()=>rows.filter(r=>scope==='sections'?r.heading:!r.heading),[rows,scope]);
@@ -36,8 +36,8 @@ export default function FollowScore({song,sectionIndex,view,instrument,position,
  }
  const estimated=rows.some(r=>!r.heading&&r.estimated);
  return <>
-  {canEdit&&!canTime&&<small className="follow-timing-note">To edit timing, leave the shared session and use solo practice.</small>}
-  {canTime&&!draft&&<div className="chart-timing-entry"><button className="button subtle" onClick={()=>{setDraft(structuredClone(song));setHistory([]);setNext(0);setStatus('');setError('');setBrowsing(true)}}>Tap to sync timing</button><small>Listen and mark when sections, chord lines or tab blocks should appear.</small></div>}
+  {timingToolsVisible&&canEdit&&!canTime&&<small className="follow-timing-note">To edit timing, leave the shared session and use solo practice.</small>}
+  {timingToolsVisible&&canTime&&!draft&&<div className="chart-timing-entry"><button className="button subtle" onClick={()=>{setDraft(structuredClone(song));setHistory([]);setNext(0);setStatus('');setError('');setBrowsing(true)}}>Tap to sync timing</button><small>Listen and mark when sections, chord lines or tab blocks should appear.</small></div>}
   {draft&&<section className="chart-timing-controls" aria-label="Manual chart timing">
    <strong>Timing mode · {formatTime(position)}</strong><p>Play the song below. Tap a part at the moment you hear it, or use Mark next. Tapping here records timing and does not restart playback.</p>
    <label>Mark<select aria-label="Timing targets" value={scope} disabled={saving} onChange={e=>setScope(e.target.value)}><option value="sections">Section starts</option><option value="lines">{view==='tabs'?'Tab blocks':view==='lyrics'?'Lyric lines':'Chord lines'}</option></select></label>
@@ -49,7 +49,7 @@ export default function FollowScore({song,sectionIndex,view,instrument,position,
   </section>}
   {status&&<p className="follow-timing-note" role="status">{status}</p>}
   {!draft&&(browsing||!following)&&<div className="follow-timing-note">Browsing the full song. {canEdit?'Click a line to start there.':''}<button className="button subtle" onClick={()=>{onFollow();setBrowsing(false)}}>Return to current line</button></div>}
-  {!draft&&estimated&&<small className="follow-timing-note">Automatic timing uses matched timestamps where available. Other line and tab positions are estimated.</small>}
+  {timingToolsVisible&&!draft&&estimated&&<small className="follow-timing-note">Automatic timing uses matched timestamps where available. Other line and tab positions are estimated.</small>}
   {error&&<p role="alert">{error}</p>}
   <div className={'follow-score-scroll'+(draft?' marking-timing':'')} ref={container} style={{fontSize}} onWheel={()=>setBrowsing(true)} onTouchMove={()=>setBrowsing(true)}>{rows.map((row,i)=>{
    const actionable=!!draft?(scope==='sections'?!!row.heading:!row.heading):canEdit;
