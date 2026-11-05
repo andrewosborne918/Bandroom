@@ -1,7 +1,7 @@
 import {outputAudioTime} from './audio-clock.ts';
 import {playbackIndex,packedStream} from './packed-audio.ts';
 import {WavStream,wavHeader,type AudioRange} from './wav-stream.ts';
-import {safeLoop,transportPosition} from './rehearsal.ts';
+import {safeLoop,transportPosition,loopClock} from './rehearsal.ts';
 import {audioCacheKey,decodedAudioCache,deviceAudioBudget} from './audio-cache.ts';
 import {beatMap} from './analysis.ts';
 import {restricted} from './stems.ts';
@@ -93,19 +93,20 @@ export class BandAudio {
     if(t.status!=='playing')return;
     if(!this.ready)throw Error('Audio output is interrupted. Enable audio or reconnect this device’s output.');
     const rate=t.rate||1,loop=safeLoop(t.loop,song.duration);if(rate!==1&&!this.pitchFactory)throw Error('Prepare practice speed before playback');const ctx=this.context!;if(rate!==1){this.rateOutput=this.pitchFactory!(ctx,rate);this.rateOutput.connect(ctx.destination);this.effects.push(this.rateOutput)}const target=this.audioTime(t.startAt);this.startTarget=target;const when=Math.max(ctx.currentTime+.03,target),offset=transportPosition(t,t.startAt+Math.max(0,when-target)*1000,song.duration);
-    if(offset<song.duration){
+    const loopState=loopClock(t,t.startAt+Math.max(0,when-target)*1000,song.duration);
+    if(offset<song.duration||loop){
       for(const stem of song.stems){
         if(this.audience&&restricted(stem))continue;const privateStem=restricted(stem);
         const buffer=this.buffers.get(stem.id),stream=this.streams.get(stem.id),stemOffset=stem.offset||0,bufferOffset=Math.max(0,offset-stemOffset);if((!buffer&&!stream)||!loop&&(bufferOffset>=(stream?.header.duration??buffer!.duration)||stemOffset>=song.duration))continue;
         const gain=ctx.createGain();gain.gain.value=stem.enabled&&(privateStem?(stem.category==='click'?this.click:this.cues):this.stems)&&(!song.stems.some(s=>s.solo&&!this.audience||s.solo&&!restricted(s))||stem.solo)?stem.volume*(stem.category==='click'?this.clickVolume:1):0;
         const privateAudio=restricted(stem);if(ctx.createStereoPanner&&!this.split){const pan=ctx.createStereoPanner();pan.pan.value=stem.pan||0;this.pans.set(stem.id,pan);gain.connect(pan);this.output(pan,privateAudio);}else this.output(gain,privateAudio);this.gains.set(stem.id,gain);
-        if(stream){this.streamStops.push(stream.schedule(ctx,gain,{when,offset,duration:song.duration,stemOffset,rate,loop},error=>{this.stop();this.onStreamError(error)}));continue}
+        if(stream){this.streamStops.push(stream.schedule(ctx,gain,{when:when+loopState.restRemaining,offset:loopState.restRemaining&&loop?loop.start:offset,duration:song.duration,stemOffset,rate,loop},error=>{this.stop();this.onStreamError(error)}));continue}
         const audio=buffer!,src=ctx.createBufferSource();if(!loop)src.buffer=audio;if(rate!==1)src.playbackRate.value=rate;
         let loopOffset=bufferOffset;
         if(loop){
-          const frames=Math.ceil((loop.end-loop.start)*audio.sampleRate),piece=ctx.createBuffer(audio.numberOfChannels,frames,audio.sampleRate);
-          for(let channel=0;channel<audio.numberOfChannels;channel++){const from=Math.round((loop.start-stemOffset)*audio.sampleRate),read=Math.max(0,from),write=Math.max(0,-from),length=Math.min(audio.length-read,frames-write);if(length>0)piece.getChannelData(channel).set(audio.getChannelData(channel).subarray(read,read+length),write)}
-          src.buffer=piece;src.loop=true;src.loopStart=0;src.loopEnd=piece.duration;loopOffset=Math.max(0,offset-loop.start)%piece.duration;
+          const frames=Math.ceil((loop.end-loop.start+(loop.rest||0)*rate)*audio.sampleRate),piece=ctx.createBuffer(audio.numberOfChannels,frames,audio.sampleRate);
+          for(let channel=0;channel<audio.numberOfChannels;channel++){const from=Math.round((loop.start-stemOffset)*audio.sampleRate),read=Math.max(0,from),write=Math.max(0,-from),length=Math.min(audio.length-read,Math.ceil((loop.end-loop.start)*audio.sampleRate)-write);if(length>0)piece.getChannelData(channel).set(audio.getChannelData(channel).subarray(read,read+length),write)}
+          src.buffer=piece;src.loop=true;src.loopStart=0;src.loopEnd=piece.duration;loopOffset=loopState.cycleOffset%piece.duration;
         }src.connect(gain);if(loop)src.start(when,loopOffset);else src.start(when+Math.max(0,stemOffset-offset)/rate,bufferOffset,Math.max(.001,song.duration-Math.max(offset,stemOffset)));this.sources.push(src);
       }
     }
@@ -120,7 +121,7 @@ export class BandAudio {
       const countBeats=song.countIn*song.beats;
       for(let i=0;t.countIn>0&&i<countBeats;i++){const at=t.startAt-t.countIn*1000+i*t.countIn*1000/Math.max(1,countBeats);if(at>=from&&at<until)clickAt(at,i)}
       if(this.generatedClick){
-        if(loop){const length=(loop.end-loop.start)/rate,origin=t.startAt+(loop.start-t.offset)/rate*1000;const first=Math.max(0,Math.floor((from-origin)/1000/length));for(let cycle=first;cycle<=first+2;cycle++)for(const b of loopBeats){const at=origin+cycle*length*1000+(b.at-loop.start)/rate*1000;if(at>=t.startAt&&at>=from&&at<until)clickAt(at,b.index)}}
+        if(loop){const length=(loop.end-loop.start)/rate+(loop.rest||0),origin=t.startAt+(loop.start-t.offset)/rate*1000;const first=Math.max(0,Math.floor((from-origin)/1000/length));for(let cycle=first;cycle<=first+2;cycle++)for(const b of loopBeats){const at=origin+cycle*length*1000+(b.at-loop.start)/rate*1000;if(at>=t.startAt&&at>=from&&at<until)clickAt(at,b.index)}}
         else {let low=0,high=beats.length;const minimum=t.offset+(from-t.startAt)/1000*rate;while(low<high){const middle=(low+high)>>>1;if(beats[middle].at<minimum)low=middle+1;else high=middle}for(let i=low;i<beats.length;i++){const b=beats[i];const at=t.startAt+(b.at-t.offset)/rate*1000;if(at>=until)break;if(at>=t.startAt&&at>=from&&at<until&&b.at<song.duration){clickAt(at,b.index);this.nextBeat=b.index+1}}}
       }
       scheduledThrough=until;

@@ -313,3 +313,11 @@ test('invitation draft preserves its recipient and private link as encoded messa
  assert.equal(url.searchParams.get('body'),draft.body);
  assert.ok(draft.body.includes(link));assert.deepEqual([...url.searchParams.keys()],['subject','body']);
 });
+
+test('older playback clients cannot receive rest-enabled loops through session reads or readiness responses',async()=>{
+ const db=new Bucket(),song=(await call(db,'songs','POST',base)).body,created=(await call(db,'sessions','POST',{songIds:[song.id]})).body,code=created.session.code,path='sessions/'+code;
+ const key=path+'.json',stored=await (await db.get(key)).json();stored.transport={status:'playing',run:'rest',startAt:Date.now(),offset:0,countIn:0,rate:1,loop:{start:0,end:8,rest:2}};await db.put(key,JSON.stringify(stored));
+ assert.equal((await call(db,path,'GET',null,created.token)).status,409);
+ assert.equal((await call(db,path+'/ready','POST',{ready:true,songId:song.id},created.token)).status,409);
+ const updated=request(path,'GET',null,created.token);updated.headers.set('x-bndrm-playback','3');const response=await handleBand(updated,db);assert.equal(response.status,200);assert.equal((await response.json()).transport.loop.rest,2)
+});

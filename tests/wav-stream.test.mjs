@@ -91,3 +91,20 @@ test('segment writes reuse the disk index instead of rescanning every cached res
  for(let i=0;i<6;i++)assert.equal(await cache.put('chunk-'+i,new Uint8Array(4).buffer,4),true);
  assert.equal(scans,1);assert.equal(await cache.has('chunk-0'),false);assert.equal(await cache.has('chunk-5'),true);assert.equal(store.entries.size,3);
 });
+
+test('streamed practice loops leave the requested silent rest between repetitions',async()=>{
+ const file=recording({seconds:20}),ctx=new Context(),wave=new WavStream(ctx,await wavHeader(file.read,file.total),file.read);await wave.prepare(0);
+ const stop=wave.schedule(ctx,{}, {when:1,offset:0,stemOffset:0,duration:20,rate:1,loop:{start:0,end:2,rest:3}},assert.fail);
+ try{await settle();assert.ok(ctx.sources.length>=2);assert.equal(ctx.sources[0].args[0],1);assert.equal(ctx.sources[0].args[2],2);assert.equal(ctx.sources[1].args[0],6);assert.equal(ctx.sources[1].args[1],0)}finally{stop()}
+});
+
+test('decoded loops add silent rest frames without copying later song audio into the gap',()=>{
+ const ctx=new Context(),engine=new BandAudio();engine.context=ctx;engine.now=()=>1000;engine.generatedClick=false;const buffer=ctx.createBuffer(1,8000*10,8000);buffer.getChannelData(0).fill(.5);engine.buffers.set('drums',buffer);
+ const song={id:'rest',duration:10,bpm:120,beats:4,beatOffset:0,countIn:0,stems:[{id:'drums',name:'Drums',enabled:true,volume:1}],sections:[]};
+ try{engine.start(song,{status:'playing',run:'rest-run',startAt:1000,offset:0,countIn:0,rate:1,loop:{start:0,end:2,rest:3}});const piece=ctx.sources[0].buffer;assert.equal(piece.duration,5);assert.equal(piece.getChannelData(0)[100],.5);assert.equal(piece.getChannelData(0)[8000*3],0)}finally{engine.stop()}
+});
+
+test('different devices preserve the same slowed repeat and real-time rest schedule',async()=>{
+ const file=recording({seconds:40}),h=await wavHeader(file.read,file.total),stops=[];
+ try{for(const now of [10,100]){const ctx=new Context();ctx.currentTime=now;const wave=new WavStream(ctx,h,file.read);await wave.prepare(16);stops.push(wave.schedule(ctx,{}, {when:now+.5,offset:16,stemOffset:0,duration:40,rate:.5,loop:{start:16,end:18,rest:3}},assert.fail));await settle();assert.equal(ctx.sources[0].args[0],now+.5);assert.equal(ctx.sources[1].args[0],now+7.5);assert.equal(ctx.sources[0].playbackRate.value,.5)}}finally{stops.forEach(stop=>stop())}
+});

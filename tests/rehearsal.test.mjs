@@ -81,3 +81,8 @@ test('isolated database snapshot restores setlists and privacy rules',async()=>{
  await service('select 1');const snapshot=await db.dumpDataDir('gzip');const restored=new PGlite({loadDataDir:snapshot});try{assert.equal((await restored.query('select count(*)::int n from setlists where band_id=$1',[band])).rows[0].n,3);await restored.exec("select set_config('request.jwt.claim.sub','"+other+"',false);set role authenticated");assert.equal((await restored.query('select * from songs where band_id=$1',[band])).rows.length,0)}finally{await restored.close()}
 });
 test.after(()=>db.close());
+
+test('prepared audio pins survive cache pressure and never exceed the device budget',async()=>{
+ const {DeviceAudioCache}=await import('../lib/device-audio-cache.ts');const entries=new Map();const store={match:async req=>entries.get(req.url)?.clone(),put:async(req,response)=>entries.set(req.url,response.clone()),delete:async req=>entries.delete(req.url),keys:async()=>[...entries.keys()].map(url=>new Request(url))};const cache=new DeviceAudioCache(async()=>store,()=>30);
+ assert.equal(await cache.put('prepared',new ArrayBuffer(20),20),true);cache.pin('prepared',Date.now()+60000);assert.equal(await cache.put('other',new ArrayBuffer(20),20),false);assert.equal(await cache.has('prepared'),true);assert.equal(await cache.has('other'),false);await cache.clear();assert.equal(await cache.put('other',new ArrayBuffer(20),20),true)
+});
