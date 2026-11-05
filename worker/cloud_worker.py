@@ -75,7 +75,7 @@ class PublicWorker(Worker):
                         signed=self.call('POST','/'+job['id']+'/output-url',job['lease'],json={'id':asset_id,'category':category,'bytes':path.stat().st_size}).json()
                         self.upload(signed['signedUrl'],path,'audio/wav')
                         outputs.append({'id':asset_id,'category':category,'filename':category+'.wav','object_key':signed['object_key'],'bytes':path.stat().st_size,'duration':info.duration,'sampleRate':info.samplerate})
-                        self.set_progress('uploading',(index+1)*25)
+                        self.set_progress('uploading',round((index+1)*100/len(CATEGORIES)))
                     self.set_progress('saving')
                     self.call('POST','/'+job['id']+'/finish',job['lease'],json={'stems':outputs,'analysis':analysis})
             print('Saved to Bndrm: '+job.get('filename',job['kind']),flush=True);shutil.rmtree(root)

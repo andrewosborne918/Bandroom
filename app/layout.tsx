@@ -8,6 +8,7 @@ export const metadata: Metadata = {
   icons: {
     icon: "/branding/bndrm-icon.png",
     shortcut: "/branding/bndrm-icon.png",
+    apple: "/branding/bndrm-icon.png",
   },
 };
 

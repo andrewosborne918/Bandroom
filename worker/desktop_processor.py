@@ -4,9 +4,11 @@ import json,os,pathlib,runpy,signal,sys
 def main():
     configure_binaries()
     if len(sys.argv)>1 and sys.argv[1] in ('--demucs','--analyze'):
-        module='demucs' if sys.argv[1]=='--demucs' else 'analyze'
-        sys.argv=[module,*sys.argv[2:]]
-        runpy.run_module(module,run_name='__main__');return
+        if sys.argv[1]=='--demucs':
+            from analyze import run_demucs
+            run_demucs(sys.argv[2:]);return
+        sys.argv=['analyze',*sys.argv[2:]]
+        runpy.run_module('analyze',run_name='__main__');return
     if len(sys.argv)>1 and sys.argv[1]=='--build-playback':
         from playback import build_playback
         print(json.dumps(build_playback(pathlib.Path(sys.argv[2]),pathlib.Path(sys.argv[3]))),flush=True);return
@@ -44,8 +46,9 @@ def main():
     import threading
     worker._heartbeat_started=True
     threading.Thread(target=worker.heartbeat,daemon=True).start()
+    from worker import MODEL
     from demucs.pretrained import get_model
-    get_model('htdemucs')
+    get_model(MODEL)
     import whisper
     whisper.load_model('base',device='cpu')
     print(json.dumps({'stage':'idle','message':'Ready. Drop a song into the Bndrm library.'}),flush=True)

@@ -7,6 +7,7 @@ export const metadata = {title:'Download Bndrm | Mac & Windows',description:'Dow
 export default function DesktopPage() {
   return <main className="desktop-download-page">
     <section className="download-hero">
+      <img className="download-hero-logo" src="/branding/bndrm-logo.png" width={68} height={81} alt="Bndrm"/>
       <p className="eyebrow">A LITTLE LESS SETUP. A LOT MORE MUSIC.</p>
       <h1>Your band.<br/>At home on your computer.</h1>
       <p>Drop in a song. Bndrm prepares the stems on your Mac or PC. Your band joins on phones and tablets through the web app.</p>

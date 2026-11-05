@@ -13,9 +13,11 @@ def parse_progress(line):
 
 def audio_command(module,*args):
     if getattr(sys,'frozen',False):return [sys.executable,'--'+module,*args]
-    return [sys.executable,'-m',module,*args] if module=='demucs' else [sys.executable,str(pathlib.Path(__file__).resolve().parent/'analyze.py'),*args]
+    script=str(pathlib.Path(__file__).resolve().parent/'analyze.py')
+    return [sys.executable,script,'--demucs',*args] if module=='demucs' else [sys.executable,script,*args]
 
-CATEGORIES=('vocals','drums','bass','other')
+MODEL=os.getenv('BANDROOM_MODEL','htdemucs_6s').strip() or 'htdemucs_6s'
+CATEGORIES=('vocals','drums','bass','guitar','keyboards','other') if MODEL=='htdemucs_6s' else ('vocals','drums','bass','other')
 class NetworkUnavailable(Exception):pass
 class ConnectionRejected(Exception):pass
 class JobUnavailable(Exception):pass
@@ -76,7 +78,7 @@ class Worker:
     def record(self,root,job,limits):
         file=root/'job.json';temp=root/'job.json.tmp';temp.write_text(json.dumps({'job':job,'limits':limits}));temp.chmod(0o600);temp.replace(file)
     def prepare(self,job,limits,root):
-        source=root/('original'+pathlib.Path(job['filename']).suffix.lower());stemdir=root/'out'/'htdemucs'/source.stem
+        source=root/('original'+pathlib.Path(job['filename']).suffix.lower());stemdir=root/'out'/MODEL/source.stem
         if not source.exists():
             self.set_progress('downloading',0);print('Downloading '+job['filename'],flush=True)
             partial=root/'download.part'
@@ -91,7 +93,10 @@ class Worker:
         complete=root/'separated.done'
         if not complete.exists() or not all((stemdir/(c+'.wav')).exists() for c in CATEGORIES):
             print('Separating instruments. Results will be kept locally until Bndrm confirms saving.',flush=True)
-            self.command(audio_command('demucs','--int24','-n','htdemucs','-d','cpu','-j','1','-o',str(root/'out'),str(source)),'separating')
+            jobs=str(max(1,min(4,(os.cpu_count() or 2)//2)))
+            self.command(audio_command('demucs','--int24','-n',MODEL,'-d','auto','-j',jobs,'-o',str(root/'out'),str(source)),'separating')
+            if MODEL=='htdemucs_6s' and (stemdir/'piano.wav').exists() and not (stemdir/'keyboards.wav').exists():
+                shutil.copy2(stemdir/'piano.wav',stemdir/'keyboards.wav')
             for category in CATEGORIES:
                 if abs(sf.info(stemdir/(category+'.wav')).duration-actual)>.1:raise ValueError('Separated stem duration mismatch')
             complete.write_text('complete')
@@ -114,7 +119,7 @@ class Worker:
         self.set_progress('uploading',0);upload_began=time.monotonic();total_bytes=sum((stemdir/(c+'.wav')).stat().st_size for c in CATEGORIES);completed_bytes=0
         for i,category in enumerate(CATEGORIES,1):
             path=stemdir/(category+'.wav');info=sf.info(path)
-            print(f'Uploading {category} ({i}/4). Local results remain safe if the connection drops.',flush=True)
+            print(f'Uploading {category} ({i}/{len(CATEGORIES)}). Local results remain safe if the connection drops.',flush=True)
             owner=self;size=path.stat().st_size
             with path.open('rb') as audio:
                 class ReportingFile:

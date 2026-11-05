@@ -1,1 +1,43 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><title>Bndrm</title><rect width="32" height="32" rx="8" fill="#ffac6a"/><g stroke="#20201d" stroke-width="2.5" stroke-linecap="round"><path d="M8 13v6M12 8v16M16 11v10M20 6v20M24 13v6"/></g></svg>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496.36 496.36"><metadata><?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="XMP Core 6.0.0"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmpMM:DocumentID="xmp.did:cb9f5498-bb58-4572-8043-8c369e6bfb9b" xmpMM:InstanceID="xmp.iid:cb9f5498-bb58-4572-8043-8c369e6bfb9b" dcterms:provenance="https://cai-manifests.adobe.com/manifests/urn-c2pa-b3b6033a-aa3e-49d3-971a-a226ac18735f-adobe"> </rdf:Description></rdf:RDF></x:xmpmeta>
+<?xpacket end="w"?></metadata>
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #f7f5ee;
+      }
+
+      .cls-2 {
+        fill: #708f77;
+      }
+
+      .cls-3 {
+        fill: #6e8c75;
+      }
+
+      .cls-4 {
+        fill: #204130;
+      }
+
+      .cls-5 {
+        fill: #6e8d76;
+      }
+
+      .cls-6 {
+        fill: #6e8d75;
+      }
+    </style>
+  </defs>
+  <g id="Layer_1-2" data-name="Layer 1">
+    <rect class="cls-1" width="496.36" height="496.36"/>
+    <g>
+      <g>
+        <path class="cls-5" d="M168.33,424.15c0,4.16-4.11,6.38-7.09,6.45-3.3.08-7.64-2.08-7.64-6.22l-.07-137.34c0-4.26,3.57-7.24,7.24-7.3s7.57,2.48,7.57,6.83l-.02,137.58Z"/>
+        <path class="cls-6" d="M138.85,402.88c0,4.31-3.9,6.54-7.13,6.6-3.35.06-7.54-2.2-7.55-6.37l-.02-96.71c0-4.22,4.18-6.61,7.56-6.53,3.92.09,7.2,3.1,7.19,7.51l-.06,95.5Z"/>
+        <path class="cls-3" d="M197.7,394.11c0,4.06-3.93,6.1-6.93,6.24-3.21.15-7.53-1.96-7.54-5.94l-.17-75.91c-.01-4.71,3.35-7.88,7.69-7.75s7.1,3.63,7.09,8.23l-.14,75.13Z"/>
+        <path class="cls-2" d="M109.47,381.06c0,4.25-3.8,6.77-7.28,6.73-3.49-.04-7.29-2.49-7.3-6.52l-.13-47.78c-.01-4.48,3.3-7.63,7.44-7.68,4.08-.04,7.37,3.22,7.36,7.69l-.08,47.56Z"/>
+      </g>
+      <path class="cls-4" d="M350.21,235.89c19.14-13.76,31.67-33.78,35.8-56.65,3.97-22.46-.05-45.47-11.33-65.23-8.79-15.32-21.37-27.37-36.89-35.81-15.14-8.39-31.99-12.43-49.45-12.44l-143.6.04v197.39s141.13.04,141.13.04c7.84.29,14.79,1.26,22.13,3.7,34.19,12.64,47.61,52.41,32.06,84.21-6.85,14.02-19.02,23.77-34.03,27.53-6.23,1.56-12.12,2.2-18.68,2.21l-72.68.06v49.28s83.67-.11,83.67-.11c41.81-.06,77.25-24.38,94.12-61.85,20.89-48.95,5.69-106.94-42.24-132.36ZM327.3,193.31c-9.23,15.05-24.48,23.18-41.88,23.17l-90.14-.08v-102.67s92.22.27,92.22.27c17.25.05,32.23,11.07,40.76,25.58,9.14,16.85,8.84,37.17-.96,53.74Z"/>
+    </g>
+  </g>
+</svg>

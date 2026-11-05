@@ -321,3 +321,87 @@ test('older playback clients cannot receive rest-enabled loops through session r
  assert.equal((await call(db,path+'/ready','POST',{ready:true,songId:song.id},created.token)).status,409);
  const updated=request(path,'GET',null,created.token);updated.headers.set('x-bndrm-playback','3');const response=await handleBand(updated,db);assert.equal(response.status,200);assert.equal((await response.json()).transport.loop.rest,2)
 });
+
+test('chartLines formats instrumental chord progressions, deduplicates repeated chords, and separation accepts six-stem models',async()=>{
+ const {chartLines}=await import('../lib/song-charts.ts');
+ const instrumental={...base,sections:[],analysis:{version:1,bpm:120,key:'D',beats:[0,.5,1,1.5],lyrics:[],chords:[{time:0,chord:'D'},{time:1,chord:'N'},{time:2,chord:'D'},{time:4,chord:'A'},{time:6,chord:'Bm'},{time:8,chord:'G'},{time:10,chord:'D'}],methods:{},warnings:[]}};
+ assert.equal(chartLines(instrumental),'[D] [A] [Bm] [G]\n[D]');
+ const sung={...instrumental,analysis:{...instrumental.analysis,lyrics:[{start:0,end:4,text:'One two three'}],chords:[{time:0,chord:'G'},{time:0.1,chord:'D'},{time:0.2,chord:'G'},{time:3.5,chord:'G'}]}};
+ assert.equal(chartLines(sung),'[G]One two three');
+ const db=new Bucket(),env={BACKGROUND_SECRET:'six-stem-secret'};let s=(await call(db,'songs','POST',{...base,sections:[]})).body;
+ const bytes=new TextEncoder().encode('RIFF0000WAVEdata');
+ const send=async(path,method='GET',body,worker=false,lease)=>{const headers=worker?{authorization:'Bearer six-stem-secret',...(lease?{'x-job-lease':lease}:{})}:{'oai-authenticated-user-id':'owner'};if(body instanceof Uint8Array){headers['Content-Length']=String(body.length);headers['x-upload-id']='six-stem-job'}else if(body)headers['Content-Type']='application/json';return handleBand(new Request('https://bandroom.test/api/band/'+path,{method,headers,body:body instanceof Uint8Array?body:body?JSON.stringify(body):undefined}),db,env)};
+ assert.equal((await send('separation?song='+s.id+'&filename=original.wav&duration=32&sampleRate=44100','POST',bytes)).status,201);
+ const claim=await (await send('processing/queue','GET',null,true)).json();
+ for(const category of ['vocals','drums','bass','guitar','keyboards','other']){assert.equal((await send('processing/'+claim.job.id+'/result?category='+category+'&duration=32&sampleRate=44100','PUT',bytes,true,claim.job.lease)).status,200)}
+ assert.equal((await send('processing/'+claim.job.id+'/finish','POST',{analysis:instrumental.analysis},true,claim.job.lease)).status,200);
+ const saved=(await call(db,'songs/'+s.id)).body;
+ assert.equal(saved.stems.filter(st=>st.source==='ai').length,6);
+ assert.match(saved.sections[0].chords,/\[D\] \[A\] \[Bm\] \[G\]/);
+ const imported=await handleBand(new Request('https://bandroom.test/api/band/stems?'+new URLSearchParams({song:s.id,name:'Full recording',filename:'mix.wav',duration:'32',sampleRate:'44100'}),{method:'POST',headers:{'oai-authenticated-user-id':'owner','Content-Length':'16'},body:bytes}),db);assert.equal(imported.status,201);
+ assert.equal((await send('separation/from-song/'+s.id,'POST',{})).status,201);
+ const autoClaim=await (await send('processing/queue','GET',null,true)).json();
+ for(const category of ['vocals','drums','bass','other'])assert.equal((await send('processing/'+autoClaim.job.id+'/result?category='+category+'&duration=32&sampleRate=44100','PUT',bytes,true,autoClaim.job.lease)).status,200);
+ assert.equal((await send('processing/'+autoClaim.job.id+'/finish','POST',{analysis:instrumental.analysis},true,autoClaim.job.lease)).status,200);
+ const reprocess=await (await send('separation/from-song/'+s.id+'?force=1','POST',{})).json();
+ assert.equal(reprocess.status,'queued');assert.equal(reprocess.attempt,2);
+});
+
+test('inline chart editor helpers, smart tab/chart paste extraction, and AI tab analysis work end-to-end',async()=>{
+ const {diatonicChordsForKey,chordQualitiesFor,replaceChordOccurrence,nudgeChordOccurrence,replaceChordInSong,splitSectionAtLine,autoSplitAnalyzedSections}=await import('../lib/chart-edit.ts');
+ const {lookupIdentity,parseLrc,extractPastedChartAndTabs}=await import('../lib/song-charts.ts');
+ const {safeAnalysis,applyAnalysis}=await import('../lib/analysis.ts');
+ assert.deepEqual(diatonicChordsForKey('D').slice(0,7),['D','Em','F#m','G','A','Bm','C#dim']);
+ assert.ok(chordQualitiesFor('F#m7').includes('F#m'));
+ assert.equal(replaceChordOccurrence('[D]One [A]two [D]three',2,'Bm'),'[D]One [A]two [Bm]three');
+ assert.equal(nudgeChordOccurrence('[D]One two three',0,1),'One [D]two three');
+ assert.equal(nudgeChordOccurrence('One [D]two three',0,-1),'[D]One two three');
+ const editedSong=replaceChordInSong({...base,sections:[{...base.sections[0],chords:'[D]One [A]two\n[D]Three [G]four'}]},0,0,0,'Bm','section','D');
+ assert.equal(editedSong.sections[0].chords,'[Bm]One [A]two\n[Bm]Three [G]four');
+ assert.equal(editedSong.sections[0].manual,true);
+ const split=splitSectionAtLine(editedSong,0,1,'Chorus',16);
+ assert.equal(split.sections.length,2);
+ assert.equal(split.sections[1].name,'Chorus');
+ assert.equal(split.sections[1].start,16);
+ assert.deepEqual(lookupIdentity({...base,title:'01 - Bush - Comedown (Remastered 2014).mp3',artist:'Unknown'}),{artist:'Bush',title:'Comedown'});
+ const scaledLrc=parseLrc('[00:10.00] First line\n[00:20.00] Second line',30,20);
+ assert.equal(scaledLrc[0].start,15);
+ const pasted=`Ultimate-Guitar.com
+Tuning: E A D G B E
+[Intro]
+e|---0---2---3---|
+B|---3---3---0---|
+G|---2---2---0---|
+D|---0---0---0---|
+A|---------------|
+E|---------------|
+
+[Verse 1]
+D        A
+Everything Zen
+Bm       G
+I dont think so`;
+ const extracted=extractPastedChartAndTabs(pasted,'Guitar');
+ assert.equal(extracted.hasTabs,true);
+ assert.equal(extracted.hasChords,true);
+ assert.equal(extracted.sections.length,2);
+ assert.match(extracted.sections[0].tabs.Guitar,/e\|---0---2---3---\|/);
+ assert.match(extracted.sections[1].chords,/\[Bm\]I dont \[G\]think so/);
+ const rawAnalysis={
+  version:1,bpm:120,key:'D',beats:[0,.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5],
+  lyrics:[{start:0.5,end:2.0,text:'Line one'},{start:2.1,end:3.5,text:'Line two'},{start:8.5,end:10.0,text:'Chorus line one'},{start:10.2,end:12.0,text:'Chorus line two'}],
+  chords:[{time:0,chord:'D'},{time:2,chord:'A'},{time:4,chord:'Bm'},{time:6,chord:'G'}],
+  tabs:{Guitar:'[0:00 · D - A]\ne|--2--|\nB|--3--|',Bass:'[0:00 · D - A]\nG|-----|\nD|--0--|'},
+  tabCues:[{id:'gtr-0',at:0,instrument:'Guitar',block:0,text:'[0:00 · D - A]\ne|--2--|\nB|--3--|'}],
+  methods:{},warnings:[]
+ };
+ const checked=safeAnalysis(rawAnalysis,32);
+ assert.ok(checked?.tabs?.Guitar);
+ assert.ok(checked?.tabs?.Bass);
+ assert.equal(checked?.tabCues?.length,1);
+ const withAnalysis=applyAnalysis({...base,sections:[]},checked);
+ assert.match(withAnalysis.sections[0].tabs.Guitar,/e\|--2--\|/);
+ assert.equal(withAnalysis.sections[0].tabCues.length,1);
+ const autoSplit=autoSplitAnalyzedSections(withAnalysis);
+ assert.ok(autoSplit.sections.length>=2);
+});

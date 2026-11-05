@@ -1,7 +1,8 @@
 import type {AudioAnalysis} from './analysis';
 import type {SongInfo} from './song-info';
 export type Stem = { audioVersion?:string; id: string; name: string; filename: string; enabled: boolean; volume: number; duration: number; bytes: number; offset?: number; bandOnly?: boolean; category?: string; sampleRate?: number; source?: 'import'|'ai'; status?: 'completed'; pan?: number; solo?: boolean };
-export type Section = { lineCues?:{line:number;at:number;view?:'chords'|'lyrics'}[]; manual?:boolean; start?:number; tabCues?:{id:string;at:number;instrument:string;text:string;block?:number}[]; id: string; name: string; bars: number; lyrics: string; chords: string; tabs: Record<string,string> };
+export type TabCue = {id:string;at:number;instrument:string;text:string;block?:number};
+export type Section = { lineCues?:{line:number;at:number;view?:'chords'|'lyrics'}[]; manual?:boolean; start?:number; tabCues?:TabCue[]; id: string; name: string; bars: number; lyrics: string; chords: string; tabs: Record<string,string> };
 export type Song = { rehearsal?:import('./band-practice').Rehearsal; revision?:number; presets?:import('./rehearsal').MixPreset[]; id: string; title: string; artist: string; bpm: number; beats: number; denominator: number; key: string; countIn: number; beatOffset: number; duration: number; stems: Stem[]; sections: Section[]; chart?:import('./song-charts').SongChart; demo?: boolean; analysis?:AudioAnalysis; info?:SongInfo };
 export type Member = { id: string; name: string; instrument: string; ready: boolean; readyRun?:string; clockError?:number; songId?: string; seen: number; role?: 'musician'|'audience'; userId?: string };
 export type Transport = { status: 'stopped'|'preparing'|'playing'; rate?:number; loop?:import('./rehearsal').LoopRange; run: string; startAt: number; offset: number; countIn: number };
