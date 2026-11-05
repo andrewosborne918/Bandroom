@@ -34,9 +34,9 @@ export class WavStream{
  schedule(context:AudioContext,destination:AudioNode,options:{when:number;offset:number;duration:number;stemOffset:number;rate:number;loop?:LoopRange},onError:(error:Error)=>void){
   let stopped=false,busy=false,time=options.when,position=options.offset;const active=new Set<AudioBufferSourceNode>();
   const stop=()=>{stopped=true;clearInterval(timer);for(const source of active){source.onended=null;try{source.stop()}catch{}source.disconnect()}active.clear()};
-  const wrap=(at:number)=>options.loop&&at>=options.loop.end?options.loop.start+(at-options.loop.start)%(options.loop.end-options.loop.start):at;
+  const wrap=(at:number)=>{const loop=options.loop;if(!loop||at<loop.end)return at;const length=loop.end-loop.start,span=length+(loop.rest||0)*options.rate,phase=(at-loop.start)%span;if(phase>=length){time+=(span-phase)/options.rate;return loop.start}return loop.start+phase};
   const pump=async()=>{if(stopped||busy)return;busy=true;try{
-   if(time<context.currentTime-.05){position=wrap(position+(context.currentTime+.03-time)*options.rate);time=context.currentTime+.03}
+   if(time<context.currentTime-.05){const late=context.currentTime+.03-time;time=context.currentTime+.03;position=wrap(position+late*options.rate)}
    let segments=0;while(!stopped&&time<context.currentTime+8&&segments++<128){position=wrap(position);const boundary=options.loop?.end??options.duration;if(position>=options.duration)break;const sourcePosition=position-options.stemOffset;
     if(sourcePosition<0||sourcePosition>=this.header.duration){const silence=Math.min(boundary-position,sourcePosition<0?-sourcePosition:options.duration-position);if(silence<=0)break;time+=silence/options.rate;position+=silence;continue}
     const index=Math.floor(sourcePosition/WAV_CHUNK_SECONDS),offset=sourcePosition-index*WAV_CHUNK_SECONDS,buffer=await this.chunk(index);if(stopped)break;

@@ -16,6 +16,8 @@ export async function refreshDeviceCacheBudget(){
 export const assetCacheKey=(scope:string,id:string,bytes:number)=>scope+':'+id+':'+bytes;
 export class DeviceAudioCache{
  persistent:boolean|null=null;
+ private pins=new Map<string,number>();
+ pin(key:string,until:number){if(Number.isFinite(until)&&until>Date.now())this.pins.set(this.request(key).url,until)}
  private pending=new Map<string,Promise<ArrayBuffer>>();private writes:Promise<unknown>=Promise.resolve();private generation=0;
  private open:()=>Promise<Store|null>;private budget:()=>number;
  private index:Map<string,number>|null=null;private indexedAt=0;
@@ -35,8 +37,9 @@ export class DeviceAudioCache{
   const store=await this.open();if(!store){this.persistent=false;return false}if(epoch!==this.generation)return false;
   const request=this.request(key);if(await store.match(request))return true;
   if(!this.index||Date.now()-this.indexedAt>30000){const index=new Map<string,number>();for(const request of await store.keys()){const response=await store.match(request);index.set(request.url,Math.max(0,Number(response?.headers.get('x-bndrm-bytes')||0)))}this.index=index;this.indexedAt=Date.now()}
-  let total=0;const entries=[...this.index].map(([url,size])=>{total+=size;return {request:new Request(url),size}});
+  let total=0;const entries=[...this.index].map(([url,size])=>{total+=size;return {request:new Request(url),size}}).filter(entry=>(this.pins.get(entry.request.url)||0)<=Date.now());
   while(total+bytes>limit&&entries.length){const oldest=entries.shift()!;await store.delete(oldest.request);this.index.delete(oldest.request.url);total-=oldest.size}
+  if(total+bytes>limit)return false;
   const response=()=>new Response(body,{headers:{'Content-Type':'application/octet-stream','x-bndrm-bytes':String(bytes)}});
   try{await store.put(request,response())}catch{if(entries.length){await store.delete(entries[0].request);this.index.delete(entries[0].request.url);await store.put(request,response())}else{this.persistent=false;return false}}
   this.index.set(request.url,bytes);this.persistent=true;return true;
@@ -46,7 +49,7 @@ export class DeviceAudioCache{
    const data=await loader();if(epoch===this.generation)await this.put(key,data,expectedBytes);return data})();this.pending.set(key,promise);
   try{return await promise}finally{if(this.pending.get(key)===promise)this.pending.delete(key)}
  }
- async clear(){this.generation++;this.pending.clear();this.index=null;try{await this.mutate(async()=>{const store=await this.open();if(store)for(const request of await store.keys())await store.delete(request)})}catch{}}
+ async clear(){this.pins.clear();this.generation++;this.pending.clear();this.index=null;try{await this.mutate(async()=>{const store=await this.open();if(store)for(const request of await store.keys())await store.delete(request)})}catch{}}
 }
 export const deviceAudioCache=new DeviceAudioCache();
 const watchKey=(scope:string)=>'bndrm-upload-cache-v1:'+scope;

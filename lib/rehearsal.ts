@@ -1,16 +1,19 @@
 import type {Song, Stem, Transport} from './types';
 import {restricted} from './stems.ts';
-export type LoopRange = {start:number;end:number};
+export type LoopRange = {start:number;end:number;rest?:number};
 export type MixPreset = {id:string;name:string;stems:Pick<Stem,'id'|'enabled'|'volume'|'pan'|'solo'>[]};
 export function safeLoop(value:unknown,duration:number):LoopRange|undefined {
  const v=value as LoopRange|undefined;
  if(!v||!Number.isFinite(v.start)||!Number.isFinite(v.end)||v.start<0||v.end>duration||v.end-v.start<.25)return;
- return {start:v.start,end:v.end};
+ return {start:v.start,end:v.end,...(Number.isFinite(v.rest)&&v.rest!>0?{rest:Math.min(30,v.rest!)}:{})};
 }
-export function transportPosition(t:Transport,now:number,duration:number){
+export function loopClock(t:Transport,now:number,duration:number){
  const raw=t.offset+Math.max(0,(now-t.startAt)/1000)*(t.rate||1),loop=safeLoop(t.loop,duration);
- return loop&&raw>=loop.end?loop.start+(raw-loop.start)%(loop.end-loop.start):Math.min(duration,raw);
+ if(!loop||raw<loop.start)return {position:Math.min(duration,raw),restRemaining:0,cycleOffset:0};
+ const length=loop.end-loop.start,span=length+(loop.rest||0)*(t.rate||1),phase=(raw-loop.start)%span;
+ return {position:loop.start+Math.min(length,phase),restRemaining:phase>=length?(span-phase)/(t.rate||1):0,cycleOffset:phase};
 }
+export function transportPosition(t:Transport,now:number,duration:number){return loopClock(t,now,duration).position}
 export function safePresets(value:unknown,stems:Stem[]):MixPreset[]{
  if(!Array.isArray(value))return [];
  return value.slice(0,20).filter(p=>p&&typeof p.id==='string'&&/^[\w-]{1,80}$/.test(p.id)&&typeof p.name==='string'&&p.name.trim()).map(p=>({id:p.id,name:p.name.trim().slice(0,60),stems:stems.map(st=>{const x=Array.isArray(p.stems)?p.stems.find((s:any)=>s?.id===st.id):null;return {id:st.id,enabled:x?!!x.enabled:st.enabled,volume:Number.isFinite(x?.volume)?Math.max(0,Math.min(1,x.volume)):st.volume,pan:Number.isFinite(x?.pan)?Math.max(-1,Math.min(1,x.pan)):st.pan||0,solo:!!x?.solo}})}));

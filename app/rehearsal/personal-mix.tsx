@@ -1,0 +1,6 @@
+'use client';
+import type {Song} from '../../lib/types';
+import type {PersonalMix} from '../../lib/band-practice';
+export default function PersonalMixer({song,mix,onChange}:{song:Song;mix:PersonalMix;onChange:(mix:PersonalMix)=>void}){
+ return <section className="personal-mixer" aria-label="My headphone mix"><h3>My headphone mix</h3><p className="form-hint">Only your headphones on this device. The shared backing tracks and PA mix stay as arranged.</p>{song.stems.map(st=>{const value=mix[st.id]||{volume:1,muted:false};return <div className="personal-mix-row" key={st.id}><label>{st.name}{!st.enabled&&<small>Off in the band arrangement</small>}<input aria-label={'My '+st.name+' level'} type="range" min="0" max="2" step=".05" value={value.volume} disabled={!st.enabled} onChange={e=>onChange({...mix,[st.id]:{...value,volume:Number(e.target.value)}})}/></label><span>{Math.round(value.volume*100)}%</span><button className="button subtle" aria-pressed={value.muted} aria-label={(value.muted?'Unmute ':'Mute ')+st.name+' in my headphones'} disabled={!st.enabled} onClick={()=>onChange({...mix,[st.id]:{...value,muted:!value.muted}})}>{value.muted?'Unmute':'Mute'}</button></div>})}<button className="button subtle" onClick={()=>onChange({})}>Reset my mix</button></section>;
+}
