@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./text-size.css";
 import SiteHeader from "./site-header";
+import {TextSizeProvider} from "./text-size";
 
 export const metadata: Metadata = {
   title: "Bndrm | Play together",
@@ -19,7 +21,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased"><SiteHeader/>{children}</body>
+      <body className="antialiased"><TextSizeProvider><SiteHeader/>{children}</TextSizeProvider></body>
     </html>
   );
 }

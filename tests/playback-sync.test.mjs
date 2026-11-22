@@ -36,3 +36,22 @@ test('sound check bypasses a muted monitor mix and uses a bounded low-volume ton
  engine.context={state:'running',currentTime:10,destination:{speaker:true},resume:async()=>{},createOscillator:()=>tone,createGain:()=>gain};engine.stems=false;engine.click=false;
  await engine.testOutput();assert.equal(connected,engine.context.destination);assert.deepEqual(levels,[0,.06,0]);assert.ok(times[1]-times[0]<=.51);tone.onended();assert.equal(disconnected,true);
 });
+
+test('channel sound checks isolate left and right and can stop without stopping music',async()=>{
+ for(const channel of [0,1]){
+  const engine=new BandAudio();
+  const connections=[];
+  let stopped=false,disconnected=false;
+  const merger={connect:target=>connections.push(['output',target]),disconnect:()=>{disconnected=true}};
+  const gain={gain:{setValueAtTime(){},linearRampToValueAtTime(){}},connect:(target,output,input)=>connections.push(['channel',target,output,input]),disconnect(){}};
+  const tone={frequency:{value:0},connect(){},disconnect(){},start(){},stop:at=>{if(at===undefined)stopped=true}};
+  engine.context={state:'running',currentTime:0,destination:{speaker:true},resume:async()=>{},createGain:()=>gain,createOscillator:()=>tone,createChannelMerger:()=>merger};
+  await engine.testOutput(channel);
+  assert.deepEqual(connections[0],['channel',merger,0,channel]);
+  assert.equal(connections[1][1],engine.context.destination);
+  engine.stopOutputTest();
+  assert.equal(stopped,true);
+  tone.onended();
+  assert.equal(disconnected,true);
+ }
+});

@@ -32,7 +32,7 @@ export default function DesktopDownloads(){
  const arm=assets.find(a=>a.name.includes('aarch64')&&a.name.endsWith('.dmg'));
  const intel=assets.find(a=>a.name.includes('x64')&&a.name.endsWith('.dmg'));
  const windows=assets.find(a=>a.name.endsWith('.exe'));
- function download(asset:Asset|undefined,label:string){return asset?<a className="button primary" href={asset.browser_download_url}><Download size={16}/>{label}</a>:<span className="installer-pending">{failed?'Use the releases link below':'Checking download…'}</span>}
+ function download(asset:Asset|undefined,label:string){return asset?<a className="button primary" href={asset.browser_download_url}><Download size={16}/>{label}</a>:<span className="installer-pending">{failed?'Use the releases link below':assets.length?'Installer unavailable for this platform':'Checking download…'}</span>}
  return <section className="desktop-downloads" aria-label="Choose your installer">
   <p className="download-status" role="status">{message}{failed&&<button className="button subtle" onClick={()=>{setFailed(false);setMessage('Checking installer availability…');setAttempt(a=>a+1)}}>Try again</button>}</p>
   <div className="download-platforms">

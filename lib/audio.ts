@@ -45,7 +45,7 @@ export class BandAudio {
   timer: ReturnType<typeof setInterval>|null=null;
   run='';
   now=()=>Date.now();
-  audience=false; generatedClick=true; cues=true; click=false; clickVolume=.35; stems=false; split=false; adjustment=0;
+  audience=false; generatedClick=true; cues=true; click=false; clickVolume=.35; stems=false; split=false; mono=false; adjustment=0;
   nextBeat=0; song:Song|null=null; transport:Transport|null=null;
   async arm(){
     if(!this.context)this.context=new AudioContext({latencyHint:'interactive'});
@@ -63,7 +63,10 @@ export class BandAudio {
     void previous?.close().catch(()=>{});
     await this.arm();
   }
-  async testOutput(){
+  private stopTest:(()=>void)|undefined;
+  stopOutputTest(){this.stopTest?.();this.stopTest=undefined}
+  async testOutput(channel?:0|1){
+    this.stopOutputTest();
     await this.arm();
     const context=this.context!,tone=context.createOscillator(),gain=context.createGain();
     const at=context.currentTime+.03;
@@ -71,18 +74,26 @@ export class BandAudio {
     gain.gain.setValueAtTime(0,at);
     gain.gain.linearRampToValueAtTime(.06,at+.02);
     gain.gain.linearRampToValueAtTime(0,at+.45);
-    tone.connect(gain);gain.connect(context.destination);
-    tone.onended=()=>{tone.disconnect();gain.disconnect()};
+    tone.connect(gain);
+    const merge=channel===undefined?undefined:context.createChannelMerger(2);
+    if(merge){gain.connect(merge,0,channel);merge.connect(context.destination)}else gain.connect(context.destination);
+    this.stopTest=()=>{try{tone.stop()}catch{}};
+    tone.onended=()=>{tone.disconnect();gain.disconnect();merge?.disconnect();this.stopTest=undefined};
     tone.start(at);tone.stop(at+.5);
   }
   get ready(){return this.context?.state==='running';}
   get latency(){return this.context?.outputLatency||this.context?.baseLatency||0;}
   async decode(data:ArrayBuffer,activate=true){ if(activate)await this.arm();else if(!this.context)this.context=new AudioContext({latencyHint:'interactive'});return await this.context!.decodeAudioData(data); }
   stop(){this.streamStops.forEach(stop=>stop());this.streamStops=[];this.clicks.forEach(o=>{try{o.stop();}catch{}});this.clicks.clear();this.sources.forEach(s=>{try{s.stop();}catch{}});this.sources=[];this.effects.forEach(n=>n.disconnect());this.effects=[];this.rateOutput=null;this.gains.clear();this.pans.clear();if(this.timer)clearInterval(this.timer);this.timer=null;this.run='';this.transport=null;}
+  setClickEnabled(enabled:boolean){
+    this.click=enabled;
+    if(!enabled){for(const oscillator of this.clicks){try{oscillator.stop()}catch{}}this.clicks.clear()}
+  }
   output(node:AudioNode,click=false){
     if(this.audience&&click)return;
     const ctx=this.context!;
-    if(this.split&&!this.audience){const mono=ctx.createGain();mono.channelCount=1;mono.channelCountMode='explicit';const merge=ctx.createChannelMerger(2);node.connect(mono);mono.connect(merge,0,click?1:0);merge.connect(this.rateOutput||ctx.destination);}
+    if(this.split&&!this.audience){const mono=ctx.createGain();mono.channelCount=1;mono.channelCountMode='explicit';const merge=ctx.createChannelMerger(2);node.connect(mono);mono.connect(merge,0,click?1:0);merge.connect(this.rateOutput||ctx.destination);this.effects.push(mono,merge);}
+    else if(this.mono&&!this.audience){const mono=ctx.createGain();mono.channelCount=1;mono.channelCountMode='explicit';mono.channelInterpretation='speakers';node.connect(mono);mono.connect(this.rateOutput||ctx.destination);this.effects.push(mono);}
     else node.connect(this.rateOutput||ctx.destination);
   }
   private startTarget=0;
@@ -99,7 +110,7 @@ export class BandAudio {
         if(this.audience&&restricted(stem))continue;const privateStem=restricted(stem);
         const buffer=this.buffers.get(stem.id),stream=this.streams.get(stem.id),stemOffset=stem.offset||0,bufferOffset=Math.max(0,offset-stemOffset);if((!buffer&&!stream)||!loop&&(bufferOffset>=(stream?.header.duration??buffer!.duration)||stemOffset>=song.duration))continue;
         const gain=ctx.createGain();gain.gain.value=stem.enabled&&(privateStem?(stem.category==='click'?this.click:this.cues):this.stems)&&(!song.stems.some(s=>s.solo&&!this.audience||s.solo&&!restricted(s))||stem.solo)?stem.volume*(stem.category==='click'?this.clickVolume:1):0;
-        const privateAudio=restricted(stem);if(ctx.createStereoPanner&&!this.split){const pan=ctx.createStereoPanner();pan.pan.value=stem.pan||0;this.pans.set(stem.id,pan);gain.connect(pan);this.output(pan,privateAudio);}else this.output(gain,privateAudio);this.gains.set(stem.id,gain);
+        const privateAudio=restricted(stem);if(ctx.createStereoPanner&&!this.split&&!this.mono){const pan=ctx.createStereoPanner();pan.pan.value=stem.pan||0;this.pans.set(stem.id,pan);gain.connect(pan);this.output(pan,privateAudio);}else this.output(gain,privateAudio);this.gains.set(stem.id,gain);
         if(stream){this.streamStops.push(stream.schedule(ctx,gain,{when:when+loopState.restRemaining,offset:loopState.restRemaining&&loop?loop.start:offset,duration:song.duration,stemOffset,rate,loop},error=>{this.stop();this.onStreamError(error)}));continue}
         const audio=buffer!,src=ctx.createBufferSource();if(!loop)src.buffer=audio;if(rate!==1)src.playbackRate.value=rate;
         let loopOffset=bufferOffset;

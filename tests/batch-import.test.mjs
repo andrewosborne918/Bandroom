@@ -76,29 +76,49 @@ test('storage reconciliation repairs drift while preserving live upload, job and
  await user(other,'select cancel_separation($1)',[queued]);await service('select release_upload($1)',[pending]);await service('select reconcile_usage($1)',[b]);
  assert.equal(Number((await service('select reserved_bytes from band_usage where band_id=$1',[b])).rows[0].reserved_bytes),0);
 });
-test('unlimited storage is service-granted, follows owned bands and cannot leak through membership or transfer',async()=>{
+test('unlimited owner access is service-granted, removes all caps on owned bands and cannot leak through membership or transfer',async()=>{
  const personal=crypto.randomUUID(),free=crypto.randomUUID();for(const id of [personal,free])await service('insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values($1,$2,now(),$3)',[id,id+'@storage.test',JSON.stringify({storage_unlimited:true})]);
  const current=(await user(personal,"select create_band('Personal library') id")).rows[0].id;
  assert.equal(Number((await service('select storage_limit from entitlements where band_id=$1',[current])).rows[0].storage_limit),FREE_STORAGE_BYTES);
  await assert.rejects(user(personal,"insert into storage_account_overrides(user_id,storage_limit,plan) values($1,null,'personal')",[personal]),/permission denied/);
  await assert.rejects(user(personal,'select apply_account_storage($1)',[current]),/permission denied/);
  await service("insert into storage_account_overrides(user_id,storage_limit,plan) values($1,null,'personal')",[personal]);
- assert.equal((await service('select storage_limit from entitlements where band_id=$1',[current])).rows[0].storage_limit,null);
+ const personalEnt=(await service('select * from entitlements where band_id=$1',[current])).rows[0];
+ for(const col of ['storage_limit','file_limit','ai_seconds_limit','ai_monthly_seconds','member_limit','active_jobs_limit'])assert.equal(personalEnt[col],null);
  const future=(await user(personal,"select create_band('Future personal library') id")).rows[0].id;
- assert.equal((await service('select storage_limit from entitlements where band_id=$1',[future])).rows[0].storage_limit,null);
+ assert.equal((await service('select ai_monthly_seconds from entitlements where band_id=$1',[future])).rows[0].ai_monthly_seconds,null);
  const ordinary=(await user(free,"select create_band('Free library') id")).rows[0].id;
  await service("insert into band_memberships(band_id,user_id,role) values($1,$2,'member')",[ordinary,personal]);
  assert.equal(Number((await service('select storage_limit from entitlements where band_id=$1',[ordinary])).rows[0].storage_limit),FREE_STORAGE_BYTES);
  await service('update band_usage set stored_bytes=$2 where band_id=$1',[current,3*1024**3]);
+ // Owner bypasses file-size, duration, monthly/global AI minute, queue, workspace and recognition caps.
+ await service('update platform_config set monthly_ai_seconds_cap=0');
  const record=await input(current,personal);const job=await submit(record,current,personal);
- await assert.rejects(user(personal,"select reserve_upload($1,$2,$3,$4,'too-large.mp3',999999999,2,44100,'original')",[current,record.song,crypto.randomUUID(),crypto.randomUUID()]),/Invalid audio/);
+ const hugeAsset=crypto.randomUUID();
+ assert.ok((await user(personal,"select reserve_upload($1,$2,$3,$4,'huge-live-set.wav',999999999,9000,44100,'original')",[current,record.song,hugeAsset,crypto.randomUUID()])).rows[0]);
+ await service("select finalize_upload($1,999999999,9000,44100,'other')",[hugeAsset]);
+ assert.ok(await submit({song:record.song,asset:hugeAsset},current,personal));
+ // Still rejects zero-byte / invalid metadata.
+ await assert.rejects(user(personal,"select reserve_upload($1,$2,$3,$4,'empty.mp3',0,2,44100,'original')",[current,record.song,crypto.randomUUID(),crypto.randomUUID()]),/Invalid audio/);
+ // Owner bypasses 20-job queue cap and 5-workspace / hourly band.create cap.
+ for(let i=0;i<21;i++)await submit(await input(current,personal),current,personal);
+ for(let i=0;i<5;i++)assert.ok((await user(personal,"select create_band($1) id",['Extra room '+i])).rows[0].id);
+ // Owner bypasses recognition caps even with global_cap=0.
+ assert.equal((await service('select claim_recognition($1,$2,$3,$4,$5,false,0) job',[current,record.song,personal,'owner-rec-1','lease-1'])).rows[0].job.claimed,true);
+ assert.equal((await service('select claim_recognition($1,$2,$3,$4,$5,false,0) job',[current,record.song,personal,'owner-rec-2','lease-2'])).rows[0].job.claimed,true);
+ // Ordinary band still enforces global/monthly processing cap.
+ await assert.rejects(submit(await input(ordinary,free),ordinary,free),/allowance reached/);
+ await service('update platform_config set monthly_ai_seconds_cap=100000');
  await service("update processing_jobs set status='completed',results='[]' where id=$1",[job]);
  assert.ok((await user(personal,'select * from request_export($1)',[job])).rows[0].id);
  await service("insert into band_memberships(band_id,user_id,role) values($1,$2,'member')",[current,free]);
  await user(personal,'select transfer_ownership($1,$2)',[current,free]);
- const entitlement=(await service('select * from entitlements where band_id=$1',[current])).rows[0];assert.equal(Number(entitlement.storage_limit),FREE_STORAGE_BYTES);assert.equal(entitlement.plan,'free');
+ const entitlement=(await service('select * from entitlements where band_id=$1',[current])).rows[0];
+ assert.equal(Number(entitlement.storage_limit),FREE_STORAGE_BYTES);assert.equal(entitlement.plan,'free');
+ assert.equal(Number(entitlement.ai_monthly_seconds),3600);assert.equal(Number(entitlement.file_limit),262144000);assert.equal(Number(entitlement.ai_seconds_limit),600);
  await assert.rejects(user(free,"select reserve_upload($1,$2,$3,$4,'full.mp3',1000,2,44100,'original')",[current,record.song,crypto.randomUUID(),crypto.randomUUID()]),/Storage allowance/);
  await service('delete from storage_account_overrides where user_id=$1',[personal]);
- assert.equal(Number((await service('select storage_limit from entitlements where band_id=$1',[future])).rows[0].storage_limit),FREE_STORAGE_BYTES);
+ const reverted=(await service('select * from entitlements where band_id=$1',[future])).rows[0];
+ assert.equal(Number(reverted.storage_limit),FREE_STORAGE_BYTES);assert.equal(Number(reverted.ai_monthly_seconds),3600);
 });
 test.after(()=>db.close());

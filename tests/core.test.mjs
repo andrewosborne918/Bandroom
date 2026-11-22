@@ -405,3 +405,28 @@ I dont think so`;
  const autoSplit=autoSplitAnalyzedSections(withAnalysis);
  assert.ok(autoSplit.sections.length>=2);
 });
+
+test('audio output presets isolate performance channels and downmix practice to mono',()=>{
+ const engine=new BandAudio(),destination={},connections=[],gains=[],mergers=[];
+ engine.context={destination,createGain(){const node={channelCount:2,channelCountMode:'max',connect(...args){connections.push([node,...args])},disconnect(){}};gains.push(node);return node},createChannelMerger(channels){const node={channels,connect(...args){connections.push([node,...args])},disconnect(){}};mergers.push(node);return node}};
+ const music={connect(...args){connections.push(['music',...args])}},click={connect(...args){connections.push(['click',...args])}};
+ engine.split=true;engine.output(music);engine.output(click,true);
+ assert.equal(gains[0].channelCount,1);assert.equal(gains[0].channelCountMode,'explicit');
+ assert.deepEqual(connections.find(c=>c[0]===gains[0]),[gains[0],mergers[0],0,0]);
+ assert.deepEqual(connections.find(c=>c[0]===gains[1]),[gains[1],mergers[1],0,1]);
+ engine.split=false;engine.mono=true;engine.output(music);engine.output(click,true);
+ for(const node of gains.slice(2)){assert.equal(node.channelCount,1);assert.equal(node.channelCountMode,'explicit');assert.equal(node.channelInterpretation,'speakers');assert.deepEqual(connections.find(c=>c[0]===node),[node,destination])}
+ engine.audience=true;const count=connections.length;engine.output(click,true);assert.equal(connections.length,count);engine.output(music);assert.deepEqual(connections.at(-1),['music',destination]);
+ engine.stop();assert.equal(engine.effects.length,0);
+});
+
+test('no-click preset cancels queued beats and mutes imported click without muting music',()=>{
+ const engine=new BandAudio(),ctx=new FakeContext();engine.context=ctx;engine.stems=true;engine.now=()=>1000;
+ const song={...base,stems:[{id:'music',enabled:true,volume:.7},{id:'click-file',category:'click',enabled:true,volume:.8}]};
+ for(const stem of song.stems)engine.buffers.set(stem.id,{duration:32});
+ engine.click=true;engine.start(song,{status:'playing',run:'preset',startAt:1150,offset:0,countIn:0});
+ let stopped=0;engine.clicks.add({stop(){stopped++}});engine.setClickEnabled(false);engine.mix(song);
+ assert.equal(stopped,1);assert.equal(engine.clicks.size,0);assert.equal(engine.click,false);
+ assert.equal(engine.gains.get('click-file').gain.target,0);assert.equal(engine.gains.get('music').gain.target,.7);
+ engine.stop();
+});

@@ -1,0 +1,7 @@
+.audio-output-presets{margin-bottom:18px}
+.audio-preset-buttons{display:flex;gap:8px;flex-wrap:wrap}
+.audio-preset-buttons button{flex:1;min-width:140px;min-height:60px;padding:12px 16px;text-align:left;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text)}
+.audio-preset-buttons button[aria-pressed=true]{background:var(--green);border-color:var(--green);color:var(--selected-text,#fff)}
+.audio-preset-buttons strong{display:block;font-size:.8125rem}
+.audio-preset-buttons small{display:block;font-size:.6875rem;color:inherit;opacity:.85;margin-top:5px;line-height:1.4}
+.audio-output-presets>small{display:block;margin-top:8px;line-height:1.5}

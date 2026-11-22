@@ -1,0 +1,15 @@
+/* Text uses rem so the device display preference scales every view. */
+:root{font-size:calc(100% * var(--app-text-scale,1))}
+.text-size-settings{padding:0 0 18px;margin-bottom:18px;border-bottom:1px solid var(--line)}
+.text-size-settings h3{margin:0 0 12px}
+.text-size-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px}
+.text-size-controls select{flex:1;min-width:120px;width:auto}
+.text-size-preview{padding:12px;border:1px solid var(--line);border-radius:8px;line-height:1.5;background:var(--panel)}
+
+.size-control>label{display:block;font-size:.8125rem;font-weight:600}
+.size-control+.form-hint{margin:8px 0 18px}
+.chart-size-preview{font-size:calc(27px * var(--chart-text-scale,1));line-height:1.5;padding:12px;border:1px solid var(--line);border-radius:8px;overflow-wrap:anywhere}
+.tab-size-preview{font-family:ui-monospace,'SFMono-Regular',Menlo,Consolas,monospace;font-size:calc(15px * var(--tab-text-scale,1));line-height:1.35;padding:12px;border:1px solid var(--line);border-radius:8px;overflow:auto;white-space:pre}
+.score-size-toolbar{padding:12px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:flex-end}
+.score-size-toolbar .size-control{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.score-size-toolbar .text-size-controls{margin:0}
