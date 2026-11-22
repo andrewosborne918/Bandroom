@@ -8,14 +8,28 @@ import {restricted} from './stems.ts';
 import type { Song, Transport } from './types';
 export class BandAudio {
   context: AudioContext | null=null;
+  onOutputStateChange:(state:AudioContextState)=>void=()=>{};
+
+  private outputContext(){
+    if(this.context)return this.context;
+    // The empty sink ID follows the system default. Browsers without sink
+    // selection ignore the option and use their default destination.
+    const options={latencyHint:'interactive',sinkId:''} as const;
+    const context=new AudioContext(options);
+    context.onstatechange=()=>{
+      if(this.context===context)this.onOutputStateChange(context.state);
+    };
+    this.context=context;
+    return context;
+  }
+
   buffers=new Map<string,AudioBuffer>();
   bufferKeys=new Map<string,string>();
   streams=new Map<string,WavStream>();private streamStops:(()=>void)[]=[];
   onStreamError:(error:Error)=>void=()=>{};
   async loadWav(songId:string,stem:import('./types').Stem,read:AudioRange,retain:()=>boolean=()=>true,packedBytes?:number){
     const key=audioCacheKey(songId,stem)+(packedBytes?':aac':'');if(this.bufferKeys.get(stem.id)===key&&this.streams.has(stem.id))return;
-    if(!this.context)this.context=new AudioContext({latencyHint:'interactive'});
-    const context=this.context;
+    const context=this.outputContext();
     const index=packedBytes?await playbackIndex(read,packedBytes):null;const header=index?{duration:index.frames/index.sampleRate,channels:index.channels,sampleRate:index.sampleRate}:await wavHeader(read,stem.bytes);if(this.streamingBytes+Math.min(24,header.duration)*header.channels*Math.max(header.sampleRate,context.sampleRate)*4>deviceAudioBudget())throw Error('This high-resolution arrangement exceeds this device’s audio memory. Reduce its tracks or use a computer.');const stream=index?packedStream(context,index,read):new WavStream(context,header as import('./wav-stream.ts').WavHeader,read);
     await stream.prepare(0);if(!retain()||this.context!==context){stream.clear();return}this.streams.get(stem.id)?.clear();this.streams.set(stem.id,stream);this.bufferKeys.set(stem.id,key);
   }
@@ -48,8 +62,7 @@ export class BandAudio {
   audience=false; generatedClick=true; cues=true; click=false; clickVolume=.35; stems=false; split=false; mono=false; adjustment=0;
   nextBeat=0; song:Song|null=null; transport:Transport|null=null;
   async arm(){
-    if(!this.context)this.context=new AudioContext({latencyHint:'interactive'});
-    const context=this.context;
+    const context=this.outputContext();
     let timer:ReturnType<typeof setTimeout>|undefined;
     try{await Promise.race([context.resume(),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(Error('Audio did not start. Tap Enable audio or reconnect this device’s audio output.')),4000)})]);}
     finally{if(timer)clearTimeout(timer)}
@@ -58,10 +71,11 @@ export class BandAudio {
   async reconnectOutput(){
     const previous=this.context;
     // Create/resume inside the button gesture, before awaiting any network work.
-    this.stop();this.clearAudio();this.pitchFactory=null;
-    this.context=new AudioContext({latencyHint:'interactive'});
+    this.stop();this.stopOutputTest();this.clearAudio();this.pitchFactory=null;
+    this.context=null;
+    const resumed=this.arm();
     void previous?.close().catch(()=>{});
-    await this.arm();
+    await resumed;
   }
   private stopTest:(()=>void)|undefined;
   stopOutputTest(){this.stopTest?.();this.stopTest=undefined}
@@ -83,7 +97,7 @@ export class BandAudio {
   }
   get ready(){return this.context?.state==='running';}
   get latency(){return this.context?.outputLatency||this.context?.baseLatency||0;}
-  async decode(data:ArrayBuffer,activate=true){ if(activate)await this.arm();else if(!this.context)this.context=new AudioContext({latencyHint:'interactive'});return await this.context!.decodeAudioData(data); }
+  async decode(data:ArrayBuffer,activate=true){if(activate)await this.arm();return this.outputContext().decodeAudioData(data);}
   stop(){this.streamStops.forEach(stop=>stop());this.streamStops=[];this.clicks.forEach(o=>{try{o.stop();}catch{}});this.clicks.clear();this.sources.forEach(s=>{try{s.stop();}catch{}});this.sources=[];this.effects.forEach(n=>n.disconnect());this.effects=[];this.rateOutput=null;this.gains.clear();this.pans.clear();if(this.timer)clearInterval(this.timer);this.timer=null;this.run='';this.transport=null;}
   setClickEnabled(enabled:boolean){
     this.click=enabled;
@@ -142,7 +156,7 @@ export class BandAudio {
 
   mix(song:Song){for(const stem of song.stems){const gain=this.gains.get(stem.id);if(gain&&this.context)gain.gain.setTargetAtTime(stem.enabled&&(restricted(stem)?(stem.category==='click'?this.click:this.cues):this.stems)&&(!song.stems.some(s=>s.solo&&(!this.audience||!restricted(s)))||stem.solo)?stem.volume*(stem.category==='click'?this.clickVolume:1):0,this.context.currentTime,.02);const pan=this.pans.get(stem.id);if(pan&&this.context)pan.pan.setTargetAtTime(stem.pan||0,this.context.currentTime,.02);}}
   demo(song:Song){
-    const ctx=this.context!,rate=ctx.sampleRate,duration=song.duration,beat=60/song.bpm;
+    const ctx=this.outputContext(),rate=ctx.sampleRate,duration=song.duration,beat=60/song.bpm;
     song.stems.forEach((s,index)=>{
       if(this.buffers.has(s.id))return;
       const buf=ctx.createBuffer(1,Math.ceil(rate*duration),rate),out=buf.getChannelData(0);

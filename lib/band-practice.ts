@@ -1,10 +1,69 @@
 import type {Song,Session,Stem} from './types';
 import {safeLoop,type LoopRange} from './rehearsal.ts';
 import {sectionStart} from './timeline.ts';
+import {restricted,suggest} from './stems.ts';
 export type PracticeMarker={id:string;name:string;at:number};
 export type PracticeLoop=LoopRange&{id:string;name:string;rate:number};
 export type Rehearsal={markers:PracticeMarker[];loops:PracticeLoop[];bandNotes:string;approved?:{fingerprint:string;at:number}};
 export type PersonalMix=Record<string,{volume:number;muted:boolean}>;
+export const GLOBAL_TRACK_GROUPS=[
+ {id:'vocals',label:'Vocals'},
+ {id:'drums',label:'Drums'},
+ {id:'bass',label:'Bass'},
+ {id:'guitar',label:'Guitar'},
+ {id:'keyboards',label:'Keys'},
+ {id:'other',label:'Other'},
+] as const;
+export type GlobalTrackGroup=(typeof GLOBAL_TRACK_GROUPS)[number]['id'];
+export type GlobalTrackMix={muted:GlobalTrackGroup[];solo:GlobalTrackGroup[]};
+export const EMPTY_GLOBAL_TRACK_MIX:GlobalTrackMix={muted:[],solo:[]};
+const VALID_GLOBAL_GROUPS=new Set<string>(GLOBAL_TRACK_GROUPS.map(g=>g.id));
+export function stemTrackGroup(stem:Partial<Stem>):GlobalTrackGroup|null{
+ if(restricted(stem))return null;
+ const cat=stem.category||suggest(stem.name||stem.filename||'').category;
+ if(cat==='click'||cat==='spoken cues')return null;
+ if(cat==='backing vocals'||cat==='vocals')return 'vocals';
+ if(cat==='drums'||cat==='bass'||cat==='guitar'||cat==='keyboards'||cat==='other')return cat;
+ return 'other';
+}
+export function safeGlobalTrackMix(value:unknown):GlobalTrackMix{
+ const v=value as Partial<GlobalTrackMix>|null|undefined;
+ const solo=[...new Set((Array.isArray(v?.solo)?v.solo:[]).filter((x):x is GlobalTrackGroup=>typeof x==='string'&&VALID_GLOBAL_GROUPS.has(x)))];
+ if(solo.length>=GLOBAL_TRACK_GROUPS.length)return EMPTY_GLOBAL_TRACK_MIX;
+ if(solo.length>0)return {muted:[],solo};
+ const muted=[...new Set((Array.isArray(v?.muted)?v.muted:[]).filter((x):x is GlobalTrackGroup=>typeof x==='string'&&VALID_GLOBAL_GROUPS.has(x)))];
+ return {muted,solo:[]};
+}
+export function isGlobalGroupAudible(mix:GlobalTrackMix,group:GlobalTrackGroup){
+ return mix.solo.length>0?mix.solo.includes(group):!mix.muted.includes(group);
+}
+export function isStemGloballyMuted(stem:Partial<Stem>,mix:GlobalTrackMix){
+ const group=stemTrackGroup(stem);
+ return group!==null&&!isGlobalGroupAudible(mix,group);
+}
+export function toggleGlobalTrack(mix:GlobalTrackMix,group:GlobalTrackGroup):GlobalTrackMix{
+ if(mix.solo.length>0){
+  if(mix.solo.includes(group)){
+   const next=mix.solo.filter(g=>g!==group);
+   return next.length?{muted:[],solo:next}:{muted:GLOBAL_TRACK_GROUPS.map(g=>g.id),solo:[]};
+  }
+  const next=[...mix.solo,group];
+  return next.length>=GLOBAL_TRACK_GROUPS.length?EMPTY_GLOBAL_TRACK_MIX:{muted:[],solo:next};
+ }
+ return mix.muted.includes(group)?{muted:mix.muted.filter(g=>g!==group),solo:[]}:{muted:[...mix.muted,group],solo:[]};
+}
+export function soloGlobalTrack(mix:GlobalTrackMix,group:GlobalTrackGroup):GlobalTrackMix{
+ if(mix.solo.length===1&&mix.solo[0]===group)return EMPTY_GLOBAL_TRACK_MIX;
+ return {muted:[],solo:[group]};
+}
+export const hasGlobalTrackFilter=(mix:GlobalTrackMix)=>mix.solo.length>0||mix.muted.length>0;
+export function globalTrackSummary(mix:GlobalTrackMix){
+ const labelOf=(id:GlobalTrackGroup)=>GLOBAL_TRACK_GROUPS.find(g=>g.id===id)?.label||id;
+ if(mix.solo.length>0)return 'Only: '+mix.solo.map(labelOf).join(', ');
+ if(mix.muted.length>=GLOBAL_TRACK_GROUPS.length)return 'All tracks muted';
+ if(mix.muted.length>0)return 'Muted: '+mix.muted.map(labelOf).join(', ');
+ return 'All tracks';
+}
 const text=(v:unknown,n:number)=>typeof v==='string'?v.trim().slice(0,n):'';
 const validId=(v:unknown)=>typeof v==='string'&&/^[\w-]{1,80}$/.test(v);
 export function safeRehearsal(value:any,duration:number):Rehearsal{
@@ -25,6 +84,6 @@ export function addPracticeMarker(song:Song,name:string,at:number):Song{
  const markers=[...initial,{id:crypto.randomUUID(),name,at}];if(!initial.length&&at>=.25)markers.push({id:crypto.randomUUID(),name:'Intro',at:0});
  return {...song,rehearsal:safeRehearsal({...song.rehearsal,markers},song.duration)};
 }
-export function personalMonitor(song:Song,mix:PersonalMix,audience=false):Song{if(audience)return song;return {...song,stems:song.stems.map(st=>{const local=Object.hasOwn(mix,st.id)?mix[st.id]:undefined;return local?{...st,volume:st.volume*Math.max(0,Math.min(2,local.volume)),enabled:st.enabled&&!local.muted}:st})}}
+export function personalMonitor(song:Song,mix:PersonalMix,audience=false,globalMix:GlobalTrackMix=EMPTY_GLOBAL_TRACK_MIX):Song{if(audience)return song;return {...song,stems:song.stems.map(st=>{const local=Object.hasOwn(mix,st.id)?mix[st.id]:undefined;const globallyMuted=isStemGloballyMuted(st,globalMix);if(!local&&!globallyMuted)return st;return {...st,volume:local?st.volume*Math.max(0,Math.min(2,local.volume)):st.volume,enabled:st.enabled&&!local?.muted&&!globallyMuted}})}}
 export function safePersonalMix(value:any,stems:Stem[]):PersonalMix{return Object.fromEntries(stems.filter(st=>value?.[st.id]&&Number.isFinite(value[st.id].volume)).map(st=>[st.id,{volume:Math.max(0,Math.min(2,value[st.id].volume)),muted:!!value[st.id].muted}]))}
 export function deviceReadiness(session:Session,now=Date.now()){return session.members.map(m=>({...m,status:now-m.seen>=30000?'disconnected':m.songId!==session.songId?'preparing-song':m.clockError!==undefined&&m.clockError>100?'clock':m.ready?'ready':'audio'}))}

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {safeRehearsal,addPracticeMarker,practiceParts,chartFingerprint,chartApproved,personalMonitor,safePersonalMix,deviceReadiness} from '../lib/band-practice.ts';
+import {safeRehearsal,addPracticeMarker,practiceParts,chartFingerprint,chartApproved,personalMonitor,safePersonalMix,deviceReadiness,EMPTY_GLOBAL_TRACK_MIX,safeGlobalTrackMix,toggleGlobalTrack,soloGlobalTrack,globalTrackSummary,hasGlobalTrackFilter} from '../lib/band-practice.ts';
 import {safeLoop,loopClock,transportPosition} from '../lib/rehearsal.ts';
 import {validateSong} from '../lib/cloud/song-validation.ts';
 import {rememberPackGrant,packGrant,clearRehearsalPacks,PACK_WINDOW_MS} from '../lib/rehearsal-pack.ts';
@@ -18,4 +18,51 @@ test('only explicitly prepared complete cached audio bridges network failures; d
 
 test('adding markers preserves existing named chart sections and inserts an intro before a late first mark',()=>{
  const song=fixture();song.sections=[{...song.sections[0],name:'Verse',id:'verse',start:0},{...song.sections[0],name:'Chorus',id:'chorus',start:20}];const changed=addPracticeMarker(song,'Prechorus',12);assert.deepEqual(practiceParts(changed).map(p=>p.name),['Verse','Prechorus','Chorus']);const first=addPracticeMarker(fixture(),'Verse',8);assert.deepEqual(practiceParts(first).map(p=>[p.name,p.start]),[['Intro',0],['Verse',8]])
+});
+
+test('overall track mutes and solos apply across every song without affecting click, cues or PA output',()=>{
+ const makeSong=(id)=>({...fixture(),id,stems:[
+  {id:id+'-vocals',name:'Vocals',filename:'vocals.wav',category:'vocals',enabled:true,volume:.7,bytes:20,duration:40},
+  {id:id+'-bgv',name:'Harmony',filename:'bgv.wav',category:'backing vocals',enabled:true,volume:.7,bytes:20,duration:40},
+  {id:id+'-drums',name:'Drums',filename:'drums.wav',category:'drums',enabled:true,volume:.7,bytes:20,duration:40},
+  {id:id+'-bass',name:'Bass',filename:'bass.wav',category:'bass',enabled:true,volume:.7,bytes:20,duration:40},
+  {id:id+'-guitar',name:'Guitar',filename:'guitar.wav',category:'guitar',enabled:true,volume:.7,bytes:20,duration:40},
+  {id:id+'-keys',name:'Keyboards',filename:'keyboards.wav',category:'keyboards',enabled:true,volume:.7,bytes:20,duration:40},
+  {id:id+'-other',name:'Other',filename:'other.wav',category:'other',enabled:true,volume:.7,bytes:20,duration:40},
+  {id:id+'-click',name:'Click',filename:'click.wav',category:'click',bandOnly:true,enabled:true,volume:.7,bytes:20,duration:40},
+ ]});
+ const songA=makeSong('a'),songB=makeSong('b');
+ // Mute bass across every song
+ const noBass=toggleGlobalTrack(EMPTY_GLOBAL_TRACK_MIX,'bass');
+ assert.equal(hasGlobalTrackFilter(noBass),true);
+ assert.equal(globalTrackSummary(noBass),'Muted: Bass');
+ for(const s of [songA,songB]){
+  const monitored=personalMonitor(s,{},false,noBass);
+  assert.equal(monitored.stems.find(st=>st.category==='bass').enabled,false);
+  assert.equal(monitored.stems.find(st=>st.category==='drums').enabled,true);
+  assert.equal(monitored.stems.find(st=>st.category==='click').enabled,true);
+  // Shared song object is never mutated
+  assert.equal(s.stems.find(st=>st.category==='bass').enabled,true);
+ }
+ // Solo drums across every song
+ const drumsOnly=soloGlobalTrack(noBass,'drums');
+ assert.equal(globalTrackSummary(drumsOnly),'Only: Drums');
+ const monitoredDrums=personalMonitor(songA,{},false,drumsOnly);
+ assert.deepEqual(monitoredDrums.stems.filter(st=>st.enabled).map(st=>st.category),['drums','click']);
+ // Add bass while soloing drums => Drums + Bass only
+ const rhythmOnly=toggleGlobalTrack(drumsOnly,'bass');
+ assert.equal(globalTrackSummary(rhythmOnly),'Only: Drums, Bass');
+ assert.deepEqual(personalMonitor(songB,{},false,rhythmOnly).stems.filter(st=>st.enabled).map(st=>st.category),['drums','bass','click']);
+ // Clicking Only again on a single soloed instrument restores all tracks
+ assert.deepEqual(soloGlobalTrack(drumsOnly,'drums'),EMPTY_GLOBAL_TRACK_MIX);
+ // Muting vocals also mutes backing vocals
+ const noVocals=toggleGlobalTrack(EMPTY_GLOBAL_TRACK_MIX,'vocals');
+ const monitoredNoVocals=personalMonitor(songA,{},false,noVocals);
+ assert.equal(monitoredNoVocals.stems.find(st=>st.category==='vocals').enabled,false);
+ assert.equal(monitoredNoVocals.stems.find(st=>st.category==='backing vocals').enabled,false);
+ // Audience PA output is never altered
+ assert.equal(personalMonitor(songA,{},true,drumsOnly),songA);
+ // Sanitizes invalid saved payloads
+ assert.deepEqual(safeGlobalTrackMix({muted:['bass','bogus','bass'],solo:[]}),{muted:['bass'],solo:[]});
+ assert.deepEqual(safeGlobalTrackMix({muted:['bass'],solo:['drums','drums','bogus']}),{muted:[],solo:['drums']});
 });

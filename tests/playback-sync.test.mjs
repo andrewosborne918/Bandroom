@@ -29,6 +29,28 @@ test('reconnecting output replaces the old context and invalidates its stream ca
  engine.streams.set('old',{clear:()=>{cleared=true}});engine.bufferKeys.set('old','cached');
  try{await engine.reconnectOutput();assert.equal(oldClosed,true);assert.equal(cleared,true);assert.equal(engine.streams.size,0);assert.equal(engine.bufferKeys.size,0);assert.equal(engine.ready,true)}finally{globalThis.AudioContext=prior}
 });
+test('playback follows the system output and reports the current context’s interruptions',async()=>{
+ const previous=globalThis.AudioContext;
+ const sinks=[],states=[];
+ globalThis.AudioContext=class{
+  state='suspended';
+  constructor(options){sinks.push(options.sinkId)}
+  async resume(){this.state='running'}
+  async close(){this.state='closed';this.onstatechange()}
+ };
+ try{
+  const engine=new BandAudio();
+  engine.onOutputStateChange=state=>states.push(state);
+  await engine.arm();
+  const first=engine.context;
+  first.state='interrupted';first.onstatechange();
+  first.state='running';first.onstatechange();
+  await engine.reconnectOutput();
+  assert.deepEqual(sinks,['','']);
+  assert.deepEqual(states,['interrupted','running']);
+  assert.equal(engine.ready,true);
+ }finally{if(previous)globalThis.AudioContext=previous;else delete globalThis.AudioContext}
+});
 test('sound check bypasses a muted monitor mix and uses a bounded low-volume tone',async()=>{
  const engine=new BandAudio(),levels=[],times=[];let connected,disconnected=false;
  const gain={gain:{setValueAtTime:v=>levels.push(v),linearRampToValueAtTime:v=>levels.push(v)},connect:to=>{connected=to},disconnect(){}};
