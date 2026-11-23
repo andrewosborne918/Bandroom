@@ -1,0 +1,31 @@
+.session-share-code {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  text-align: center;
+}
+
+.session-share-code svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.session-share-code span {
+  display: block;
+  color: var(--muted);
+  font-size: .75rem;
+}
+
+.session-share-code strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--green);
+  font: 700 1.5rem ui-monospace, monospace;
+  letter-spacing: .12em;
+}
