@@ -63,4 +63,11 @@ async function workerProcessing(req:Request,p:string[],processor:{id:string;band
 
 async function serviceCopyOriginal(input:any,client:any){const db=admin();const h=await sha('original-copy:'+input.id);const id=[h.slice(0,8),h.slice(8,12),h.slice(12,16),h.slice(16,20),h.slice(20,32)].join('-');const asset=await result<any>(client.rpc('reserve_upload',{b:input.band_id,s:input.song_id,a:id,reservation:crypto.randomUUID(),file_name:input.filename,file_bytes:Number(input.bytes),file_duration:input.duration,file_rate:input.sample_rate,asset_source:'original'}).single());if(asset.status==='verified')return asset;const copy=await storage(input.bucket).copy(input.object_key,asset.object_key,{destinationBucket:'originals'});if(copy.error){const info=await result(storage('originals').info(asset.object_key));if(Number(info.size)!==Number(input.bytes))problem('Original copy failed');}return result<any>(db.rpc('finalize_upload',{a:asset.id,actual_bytes:Number(input.bytes),actual_duration:input.duration,actual_rate:input.sample_rate,category:input.category}).single())}
 
-async function assertProcessorJob(service:any,table:string,id:string,bandId:string){let query=service.from(table).select(table==='verification_tasks'?'audio_assets!inner(band_id)':'band_id').eq('id',id);const {data:r}=await query.maybeSingle();if(!r||(table==='verification_tasks'?r.audio_assets.band_id:r.band_id)!==bandId)problem('Job outside processor workspace',403)}
+async function assertProcessorJob(service:any,table:string,id:string,bandId:string){
+ const verification=table==='verification_tasks';
+ const query=service.from(table).select(verification?'audio_assets!inner(band_id)':'band_id').eq('id',id);
+ const job=await result(query.maybeSingle());
+ const jobBand=verification?job?.audio_assets?.band_id:job?.band_id;
+ // The authenticated processor can skip an unavailable job and keep polling the queue.
+ if(jobBand!==bandId)problem('Processing job unavailable',404);
+}
