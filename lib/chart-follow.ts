@@ -3,15 +3,18 @@ import type {Song} from './types';
 import {displaySection,lyricsOnly,normalizeChordChart} from './song-charts.ts';
 export type FollowRow={text:string;line:number;at?:number;end?:number;estimated?:boolean;manual?:boolean};
 const normal=(s:string)=>s.toLowerCase().replace(/[^a-z0-9]/g,'');
+export const usesRecordedLineTiming=(song:Song,view:string)=>
+ (view==='chords'||view==='lyrics')&&!!song.info?.recordedLineTiming?.includes(view);
 function allFollowRows(song:Song,view='chords'):FollowRow[][]{
- const reference=song.chart?.timedLyrics.length?song.chart.timedLyrics:song.analysis?.lyrics||[];let cursor=0;const results:FollowRow[][]=[];
+ const recorded=usesRecordedLineTiming(song,view);
+ const reference=recorded?[]:song.chart?.timedLyrics.length?song.chart.timedLyrics:song.analysis?.lyrics||[];let cursor=0;const results:FollowRow[][]=[];
  for(let index=0;index<song.sections.length;index++){
  const section=displaySection(song,song.sections[index])!;const text=view==='lyrics'?(section.lyrics||lyricsOnly(section.chords)):normalizeChordChart(section.chords||section.lyrics);const lines=text.split('\n').filter(line=>line.trim());const rows:FollowRow[]=lines.map((text,line)=>({text,line}));
  for(const row of rows){const lyric=lyricsOnly(row.text);if(!lyric||row.text.startsWith('{'))continue;const target=normal(lyric);if(target.length<4)continue;let match=-1;
  for(let i=cursor;i<reference.length;i++){const candidate=normal(reference[i].text);if(candidate===target||candidate.includes(target)||target.includes(candidate)&&candidate.length>=8){match=i;break}}
  if(match>=0){row.at=reference[match].start;row.end=reference[match].end;row.estimated=!song.chart?.timedLyrics.length;cursor=match+1;}
  }
- const firstContent=rows.find(r=>!r.text.startsWith('{'));if(firstContent&&!lyricsOnly(firstContent.text)&&section.start!==undefined){firstContent.at=section.start;firstContent.end=reference.find(l=>l.start>section.start!)?.start??song.duration;}
+ const firstContent=rows.find(r=>!r.text.startsWith('{'));if(!recorded&&firstContent&&!lyricsOnly(firstContent.text)&&section.start!==undefined){firstContent.at=section.start;firstContent.end=reference.find(l=>l.start>section.start!)?.start??song.duration;}
  for(const cue of section.lineCues||[]){if(cue.view&&cue.view!==view)continue;const row=rows[cue.line];if(row){row.at=cue.at;row.estimated=false;row.manual=true;row.end=undefined}}
  for(let i=0;i<rows.length;i++){if(rows[i].at!==undefined&&!rows[i].end){const next=rows.slice(i+1).find(r=>r.at!==undefined&&r.at!>rows[i].at!);rows[i].end=next?.at??song.duration}}
  results.push(rows);
@@ -20,7 +23,11 @@ function allFollowRows(song:Song,view='chords'):FollowRow[][]{
 }
 export function followRows(song:Song,sectionIndex:number,view='chords'):FollowRow[]{return allFollowRows(song,view)[sectionIndex]||[];}
 export function activeFollowRow(rows:FollowRow[],position:number){let index=-1;for(let i=0;i<rows.length;i++){const row=rows[i];if(row.at!==undefined&&row.at<=position&&position<(row.end??Infinity)&&(index<0||row.at>=rows[index].at!))index=i}return index;}
-export function withFollowSectionStarts(song:Song):Song{
+export function withFollowSectionStarts(song:Song,view='chords'):Song{
+ if(usesRecordedLineTiming(song,view)){
+  const rows=allFollowRows(song,view);
+  return {...song,sections:song.sections.map((section,index)=>({...section,start:rows[index].find(row=>row.manual)?.at??section.start}))};
+ }
  if(!song.chart?.timedLyrics.length&&!song.sections.some(s=>s.lineCues?.length))return song;
  const rows=allFollowRows(song);const sections=song.sections.map((s,i)=>{if(s.start!==undefined||i===0)return {...s};const first=rows[i].find(r=>r.at!==undefined);return first?{...s,start:first.at}:{...s}});
  let previous=sections[0]?.start??song.beatOffset;
@@ -30,7 +37,24 @@ export function withFollowSectionStarts(song:Song):Song{
 
 export type ScoreRow=FollowRow&{key:string;section:number;heading?:boolean;tab?:boolean;block?:number;cueId?:string};
 export function automaticScore(song:Song,view:string,instrument:string):ScoreRow[]{
- const timed=withFollowSectionStarts(song),rowsBySection=allFollowRows(song,view),result:ScoreRow[]=[],seenTabs=new Set<string>();
+ const rowsBySection=allFollowRows(song,view),result:ScoreRow[]=[],seenTabs=new Set<string>();
+ if(usesRecordedLineTiming(song,view)){
+  for(const [index,section] of song.sections.entries()){
+   const rows=rowsBySection[index].filter(row=>!row.text.startsWith('{')&&(view!=='lyrics'||!!lyricsOnly(row.text)));
+   const at=rows.find(row=>row.at!==undefined)?.at;
+   result.push({key:section.id+'-heading',section:index,heading:true,text:section.name,line:-1,at,end:at});
+   for(const [i,row] of rows.entries())result.push({...row,key:section.id+'-'+view+'-'+i,section:index});
+  }
+  let end=song.duration;
+  for(let i=result.length-1;i>=0;i--){
+   const row=result[i];
+   if(row.heading||row.at===undefined)continue;
+   row.end=end;
+   end=row.at;
+  }
+  return result;
+ }
+ const timed=withFollowSectionStarts(song,view);
  for(let index=0;index<song.sections.length;index++){
  const section=song.sections[index],start=Math.max(0,Math.min(song.duration,sectionStart(timed,index))),end=Math.max(start,Math.min(song.duration,index+1<song.sections.length?sectionStart(timed,index+1):song.duration));
  result.push({key:section.id+'-heading',section:index,heading:true,text:section.name,line:-1,at:start,end,estimated:section.start===undefined});

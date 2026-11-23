@@ -1,7 +1,20 @@
 import type {Song} from './types';
 import type {ScoreRow} from './chart-follow';
-import {automaticScore} from './chart-follow.ts';
+import {automaticScore,usesRecordedLineTiming} from './chart-follow.ts';
 import {displaySection,normalizeChordChart} from './song-charts.ts';
+import type {LineTimingView} from './song-info';
+
+export function resetLineTiming(song:Song,view:LineTimingView):Song{
+  const otherView=view==='chords'?'lyrics':'chords';
+  return {
+    ...song,
+    info:{...song.info,recordedLineTiming:[...new Set([...(song.info?.recordedLineTiming??[]),view])]},
+    sections:song.sections.map(section=>({
+      ...section,
+      lineCues:section.lineCues?.filter(cue=>cue.view!==view).map(cue=>cue.view?cue:{...cue,view:otherView}),
+    })),
+  };
+}
 
 export function stampChartTime(song:Song,row:ScoreRow,view:string,instrument:string,position:number):Song{
   if(!Number.isFinite(position)||position<0||position>=song.duration)throw Error('Choose a position inside the song before marking timing.');
@@ -35,14 +48,18 @@ export function chartTimingProblems(song:Song):string[]{
   }
   for(const view of ['chords','lyrics','tabs']){
     const instruments=view==='tabs'?[...new Set(song.sections.flatMap(s=>[...Object.keys(s.tabs),...(s.tabCues||[]).map(c=>c.instrument)]))]:['Guitar'];
+    const recorded=usesRecordedLineTiming(song,view);
     for(const instrument of instruments){
       let last=-1;
       const rows=automaticScore(song,view,instrument),headings=rows.filter(row=>row.heading);
       for(const row of rows){
         if(row.heading||!row.manual||row.at===undefined)continue;
-        const sectionStart=headings.find(h=>h.section===row.section)?.at??0;
-        const sectionEnd=headings.find(h=>h.section===row.section)?.end??song.duration;
-        if(row.at<sectionStart||row.at>=sectionEnd)problems.push(song.sections[row.section].name+' has a mark outside its section. Adjust the section start or retap that part.');
+        if(recorded){
+          if(row.at<0||row.at>=song.duration)problems.push('A recorded line starts outside the song.');
+        }else{
+          const heading=headings.find(h=>h.section===row.section);
+          if(row.at<(heading?.at??0)||row.at>=(heading?.end??song.duration))problems.push(song.sections[row.section].name+' has a mark outside its section. Adjust the section start or retap that part.');
+        }
         if(row.at<last){problems.push((view==='tabs'?instrument+' tab':view==='lyrics'?'Lyric':'Chord')+' marks run backwards. Retap the earlier/later part or undo the last mark.');break;}
         last=row.at;
       }

@@ -1,5 +1,10 @@
 import {WAV_CHUNK_SECONDS,WavStream,wavHeader,type AudioRange,type WavHeader} from './wav-stream.ts';
 export type PlaybackIndex={version:1;codec:'aac';sampleRate:number;channels:number;frames:number;chunkSeconds:4;segments:{bytes:number;frames:number;start:number;end:number}[]};
+export class PackedAudioError extends Error{
+ constructor(cause?:unknown){
+  super('This browser could not align the compressed audio. Retry using original audio.',{cause});
+ }
+}
 export async function playbackIndex(read:AudioRange,bytes:number):Promise<PlaybackIndex>{
  const prefix=await read(0,7),view=new DataView(prefix);if(prefix.byteLength!==8||view.getUint32(0)!==0x424e4131)throw Error('Invalid playback file.');const length=view.getUint32(4,true);if(length<2||length>65536||length+8>=bytes)throw Error('Invalid playback index.');
  const raw=JSON.parse(new TextDecoder().decode(await read(8,7+length)));if(raw.version!==1||raw.codec!=='aac'||raw.chunkSeconds!==4||![1,2].includes(raw.channels)||raw.sampleRate!==44100||!Number.isSafeInteger(raw.frames)||raw.frames<=0||raw.frames>44100*7200||!Array.isArray(raw.segments)||raw.segments.length!==Math.ceil(raw.frames/(44100*4)))throw Error('Unsupported playback index.');
@@ -35,6 +40,7 @@ export function packedStream(context:AudioContext,index:PlaybackIndex,read:Audio
     if(!partialTail)useFallback=true;
     return decodeOriginal(number)!;
    }
+   if(error instanceof DOMException&&error.name==='EncodingError')throw new PackedAudioError(error);
    throw error;
   }
   if(decoded.numberOfChannels!==index.channels||decoded.length<frames-shortfall||decoded.length>frames+context.sampleRate*.1){
@@ -42,7 +48,7 @@ export function packedStream(context:AudioContext,index:PlaybackIndex,read:Audio
     if(!partialTail)useFallback=true;
     return decodeOriginal(number)!;
    }
-   throw Error('This browser could not align the compressed audio. Retry using original audio.');
+   throw new PackedAudioError();
   }
   const buffer=context.createBuffer(index.channels,frames,context.sampleRate);
   for(let channel=0;channel<index.channels;channel++){

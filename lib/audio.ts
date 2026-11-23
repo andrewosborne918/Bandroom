@@ -145,7 +145,7 @@ export class BandAudio {
     const tick=()=>{
       if(!this.ready)return;
       const from=Math.max(scheduledThrough,this.now()+4),until=this.now()+Math.max(180,(this.latency+.15)*1000);
-      for(let i=0;i<plan.countBeats;i++){const at=plan.countStartMs+i*plan.intervalMs;if(at>=from&&at<until)clickAt(at,i)}
+      for(let i=0;i<plan.countBeats;i++){const at=plan.countStartMs+i*plan.intervalMs;if(at>=from&&at<until)clickAt(at,plan.firstCountIndex+i)}
       if(this.generatedClick){
         for(const b of plan.leadInBeats){if(b.at>=from&&b.at<until)clickAt(b.at,b.index)}
         if(loop){const length=(loop.end-loop.start)/rate+(loop.rest||0),origin=t.startAt+(loop.start-t.offset)/rate*1000;const first=Math.max(0,Math.floor((from-origin)/1000/length));for(let cycle=first;cycle<=first+2;cycle++)for(const b of loopBeats){const at=origin+cycle*length*1000+(b.at-loop.start)/rate*1000;if(at>=t.startAt&&at>=from&&at<until)clickAt(at,b.index)}}

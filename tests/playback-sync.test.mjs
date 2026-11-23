@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync,readdirSync} from 'node:fs';import {PGlite} from '@electric-sql/pglite';
 import {BandAudio} from '../lib/audio.ts';
-import {clockSample,calibratedClock,outputAudioTime} from '../lib/audio-clock.ts';import {playbackIndex,packedStream} from '../lib/packed-audio.ts';import {countInSeconds,countInPlan} from '../lib/timeline.ts';
+import {clockSample,calibratedClock,outputAudioTime} from '../lib/audio-clock.ts';import {playbackIndex,packedStream,PackedAudioError} from '../lib/packed-audio.ts';import {countInSeconds,countInPlan} from '../lib/timeline.ts';
 test('clock calibration rejects invalid measurements, expires stale samples and ignores slow outliers',()=>{assert.throws(()=>clockSample(10,20,100,90));const samples=[clockSample(0,10,100003,100003),clockSample(20,30,100023,100023),clockSample(40,440,100240,100240)];const clock=calibratedClock(samples,450);assert.equal(clock.offset,99998);assert.equal(clock.uncertainty,5);assert.equal(calibratedClock(samples,70000),null);assert.equal(calibratedClock(samples,50000).fresh,false)});
 test('audible timestamp maps shared server time without counting latency twice',()=>{const context={currentTime:10,outputLatency:.1,getOutputTimestamp:()=>({contextTime:9.9,performanceTime:1000})};assert.ok(Math.abs(outputAudioTime(context,200000,199000,1100)-11)<1e-9);assert.equal(outputAudioTime({currentTime:10,outputLatency:.1},200000,199000,1100),10.9)});
 function packed(tailFrames=44100){const raw={version:1,codec:'aac',channels:2,sampleRate:44100,frames:44100*4+tailFrames,chunkSeconds:4,segments:[{bytes:20,frames:44100*4},{bytes:10,frames:tailFrames}]},json=new TextEncoder().encode(JSON.stringify(raw)),bytes=new Uint8Array(8+json.length+30);bytes.set(new TextEncoder().encode('BNA1'));new DataView(bytes.buffer).setUint32(4,json.length,true);bytes.set(json,8);return bytes}
@@ -35,7 +35,7 @@ test('legacy AAC final segments preserve the indexed duration despite MP4 roundi
  const tinyTail=await packedStream(context,tinyIndex,readTiny).chunk(1);
  assert.equal(tinyTail.length,35);
  assert.ok(tinyTail.getChannelData(0).every(sample=>sample===0));
- await assert.rejects(packedStream(context,index,read).chunk(1),{name:'EncodingError'});
+ await assert.rejects(packedStream(context,index,read).chunk(1),error=>error instanceof PackedAudioError&&error.cause?.name==='EncodingError');
  await assert.rejects(packedStream(context,tinyIndex,async()=>{throw Error('Network unavailable')}).chunk(1),/Network unavailable/);
 });
 const db=new PGlite();await db.exec(readFileSync('tests/supabase-stubs.sql','utf8'));for(const file of readdirSync('supabase/migrations').filter(f=>f.endsWith('.sql')).sort())await db.exec(readFileSync('supabase/migrations/'+file,'utf8'));
@@ -166,4 +166,15 @@ test('count-in matches the song groove BPM and aligns seamlessly onto the first 
   startAt+1350,
  ];
  for(let i=1;i<allClicks.length;i++)assert.ok(Math.abs((allClicks[i]-allClicks[i-1])-500)<1e-6);
+});
+test('count-in uses the entering tempo and skips a beat just before the playback offset',()=>{
+ const beats=[0,.5,1,1.5,2,2.75,3.5,4.25,5,5.75];
+ const song={bpm:120,beats:4,countIn:1,beatOffset:0,analysis:{beats}};
+ const startAt=10000,offset=2.0005,countIn=countInSeconds(song,offset);
+ assert.equal(countIn,3);
+ const plan=countInPlan(song,{startAt,offset,countIn});
+ const firstSongBeat=startAt+(2.75-offset)*1000;
+ const lastCountClick=plan.countStartMs+3*plan.intervalMs;
+ assert.ok(Math.abs(firstSongBeat-lastCountClick-750)<.001);
+ assert.equal(plan.firstCountIndex,1);
 });
