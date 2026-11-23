@@ -42,6 +42,41 @@ test('loop audio preserves offsets and silence, assigns each native buffer once 
 test('count-in does not emit duplicate clicks for zero count-in and audience blocks every click',()=>{
  for(const audience of [false,true]){const context=new Context(),engine=new BandAudio();engine.context=context;engine.now=()=>0;engine.click=true;engine.audience=audience;try{engine.start({...song,stems:[]},{status:'playing',run:'click',startAt:100,offset:0,countIn:0});assert.equal(context.oscillators.length,audience?0:1)}finally{engine.stop()}}
 });
+test('per-song cutoffs preserve the count-in and stop generated clicks and imported click tracks',()=>{
+ const settings=[
+  {clickStop:{mode:'count-in'},starts:[.5,1,1.5,2],gateTime:2.5},
+  {clickStop:{mode:'seconds',value:1},starts:[.5,1,1.5,2,2.5,3],gateTime:3.5},
+  {clickStop:undefined,starts:[.5,1,1.5,2,2.5,3,3.5,4,4.5],gateTime:undefined},
+ ];
+ const previousInterval=globalThis.setInterval;
+ try{
+  for(const {clickStop,starts,gateTime} of settings){
+   const context=new Context(),engine=new BandAudio();
+   const ramps=[];
+   const makeGain=context.createGain.bind(context);
+   context.createGain=()=>{
+    const node=makeGain();
+    node.gain.linearRampToValueAtTime=(value,at)=>ramps.push({value,at});
+    node.disconnect=()=>{};
+    return node;
+   };
+   engine.context=context;engine.stems=true;engine.click=true;
+   engine.now=()=>context.currentTime*1000;
+   engine.audioTime=at=>at/1000;
+   engine.buffers.set('click-track',context.createBuffer(1,800,100));
+   let tick;
+   globalThis.setInterval=callback=>{tick=callback;return 0};
+   try{
+    const clickStem={id:'click-track',category:'click',volume:.5,enabled:true};
+    engine.start({...song,bpm:120,beats:4,beatOffset:0,countIn:1,info:{clickStop},stems:[clickStem]},
+      {status:'playing',run:'click-duration',startAt:2500,offset:0,countIn:2});
+    for(let ms=25;ms<=4500;ms+=25){context.currentTime=ms/1000;tick()}
+    assert.deepEqual(context.oscillators.map(node=>node.at),starts);
+    assert.deepEqual(ramps,gateTime===undefined?[]:[{value:0,at:gateTime}]);
+   }finally{engine.stop()}
+  }
+ }finally{globalThis.setInterval=previousInterval}
+});
 const db=new PGlite();await db.exec(readFileSync('tests/supabase-stubs.sql','utf8'));for(const f of readdirSync('supabase/migrations').filter(f=>f.endsWith('.sql')).sort())await db.exec(readFileSync('supabase/migrations/'+f,'utf8'));
 const owner=crypto.randomUUID(),other=crypto.randomUUID(),member=crypto.randomUUID();for(const id of [owner,other,member])await db.query('insert into auth.users(id,email,email_confirmed_at) values($1,$2,now())',[id,id+'@rehearsal.test']);
 async function asUser(id,query,params=[]){await db.exec("reset role;select set_config('request.jwt.claim.sub','"+id+"',false);set role authenticated");return db.query(query,params)}

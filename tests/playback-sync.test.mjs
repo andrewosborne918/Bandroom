@@ -1,6 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync,readdirSync} from 'node:fs';import {PGlite} from '@electric-sql/pglite';
 import {BandAudio} from '../lib/audio.ts';
-import {clockSample,calibratedClock,outputAudioTime} from '../lib/audio-clock.ts';import {playbackIndex,packedStream,PackedAudioError} from '../lib/packed-audio.ts';import {countInSeconds,countInPlan} from '../lib/timeline.ts';
+import {clockSample,calibratedClock,outputAudioTime} from '../lib/audio-clock.ts';import {playbackIndex,packedStream,PackedAudioError} from '../lib/packed-audio.ts';import {clickStopPosition,countInSeconds,countInPlan} from '../lib/timeline.ts';
+import {sanitizeInfo} from '../lib/song-info.ts';
 test('clock calibration rejects invalid measurements, expires stale samples and ignores slow outliers',()=>{assert.throws(()=>clockSample(10,20,100,90));const samples=[clockSample(0,10,100003,100003),clockSample(20,30,100023,100023),clockSample(40,440,100240,100240)];const clock=calibratedClock(samples,450);assert.equal(clock.offset,99998);assert.equal(clock.uncertainty,5);assert.equal(calibratedClock(samples,70000),null);assert.equal(calibratedClock(samples,50000).fresh,false)});
 test('audible timestamp maps shared server time without counting latency twice',()=>{const context={currentTime:10,outputLatency:.1,getOutputTimestamp:()=>({contextTime:9.9,performanceTime:1000})};assert.ok(Math.abs(outputAudioTime(context,200000,199000,1100)-11)<1e-9);assert.equal(outputAudioTime({currentTime:10,outputLatency:.1},200000,199000,1100),10.9)});
 function packed(tailFrames=44100){const raw={version:1,codec:'aac',channels:2,sampleRate:44100,frames:44100*4+tailFrames,chunkSeconds:4,segments:[{bytes:20,frames:44100*4},{bytes:10,frames:tailFrames}]},json=new TextEncoder().encode(JSON.stringify(raw)),bytes=new Uint8Array(8+json.length+30);bytes.set(new TextEncoder().encode('BNA1'));new DataView(bytes.buffer).setUint32(4,json.length,true);bytes.set(json,8);return bytes}
@@ -177,4 +178,14 @@ test('count-in uses the entering tempo and skips a beat just before the playback
  const lastCountClick=plan.countStartMs+3*plan.intervalMs;
  assert.ok(Math.abs(firstSongBeat-lastCountClick-750)<.001);
  assert.equal(plan.firstCountIndex,1);
+});
+test('song click durations survive validation and measure counts use the detected beat grid',()=>{
+ const song={bpm:120,beats:4,beatOffset:.35,analysis:{beats:[0,.5,1,1.5,2.25,3,3.75,4.5,5.25]}};
+ assert.equal(clickStopPosition(song),Infinity);
+ const withStop=clickStop=>({...song,info:sanitizeInfo({clickStop})});
+ assert.equal(clickStopPosition(withStop({mode:'count-in'})),0);
+ assert.equal(clickStopPosition(withStop({mode:'bars',value:1})),2.6);
+ assert.equal(clickStopPosition(withStop({mode:'bars',value:2})),5.6);
+ assert.equal(clickStopPosition(withStop({mode:'seconds',value:6.25})),6.25);
+ assert.equal(clickStopPosition(withStop({mode:'bars',value:1.5})),Infinity);
 });

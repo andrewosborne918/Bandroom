@@ -5,6 +5,19 @@ export function sectionAt(song:Song,seconds:number){let index=0;for(let i=0;i<so
 export const sectionStart=(song:Song,index:number)=>song.sections[index]?.start??atBeat(song,song.sections.slice(0,index).reduce((n,s)=>n+s.bars,0)*song.beats);
 export const formatTime=(seconds:number)=>{const s=Math.floor(Math.max(0,seconds));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');};
 export const transpose=(value:string,steps:number)=>{const notes=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];const flat:Record<string,string>={Db:'C#',Eb:'D#',Gb:'F#',Ab:'G#',Bb:'A#'};return value.replace(/\[([^\]]+)\]/g,(_,chord:string)=>'['+chord.replace(/(^|\/)([A-G](?:#|b)?)/g,(_m,p:string,n:string)=>p+notes[(notes.indexOf(flat[n]||n)+steps+120)%12])+']');};
+export function clickStopPosition(song:Song){
+ const setting=song.info?.clickStop;
+ if(!setting)return Infinity;
+ if(setting.mode==='count-in')return 0;
+ if(setting.mode==='seconds')return setting.value;
+ const index=setting.value*song.beats;
+ const map=beatMap(song);
+ if(map?.length&&index>=map.length){
+  const last=map.at(-1)!+song.beatOffset-map[0];
+  return last+(index-map.length+1)*localBeatInterval(song,last);
+ }
+ return atBeat(song,index);
+}
 
 export function localBeatInterval(song:Song,offset:number){
  const fallback=60/Math.max(25,song.bpm||120);
