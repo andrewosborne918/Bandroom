@@ -82,6 +82,7 @@ export default function Bndrm({cloud=false,canEdit=true,cacheScope='',workspaceN
   const [view,setView]=useState('chords'),[showLyrics,setShowLyrics]=useState(true),[showChords,setShowChords]=useState(true),[transposeBy,setTransposeBy]=useState(0),[manualSection,setManualSection]=useState<number|null>(null);
   const [position,setPosition]=useState(0),[beat,setBeat]=useState(-1),[countdown,setCountdown]=useState(''),[flash,setFlash]=useState(false);
   const preparation=useRef<{songId:string;promise:Promise<void>}|null>(null);
+  const soloPlayRequest=useRef(0);
   const preferOriginalRef=useRef(false);
   const [audioPreparation,setAudioPreparation]=useState({done:0,total:0,error:''}),[audioRetry,setAudioRetry]=useState(0),[cacheRevision,setCacheRevision]=useState(0);
   const [preparedRun,setPreparedRun]=useState('');
@@ -178,6 +179,12 @@ export default function Bndrm({cloud=false,canEdit=true,cacheScope='',workspaceN
     audio.onOutputStateChange=state=>setOutputInterrupted(state!=='running');
     audio.onStreamError=error=>{
       if(recoverPackedAudio(error))return;
+      const current=transportRef.current,active=songRef.current;
+      if(!credential.current&&active&&current.status==='playing'){
+        const offset=transportPosition(current,now()-audio.adjustment,active.duration);
+        manualStop.current=current.run;
+        setLocalTransport({...stopped,run:crypto.randomUUID(),offset});
+      }
       setLoaded(false);setAudioPreparation(previous=>({...previous,error:error.message}));notify(error.message);
     };
     try{const pref=JSON.parse(localStorage.getItem('bandroom-preferences')||'{}');setInstrument(pref.instrument||'Guitar');setName(pref.name||displayName);setAdjustment(pref.adjustment||0);setLeaderTracks(pref.leaderTracks!==false);setSplit(pref.split===true);setMono(pref.mono===true&&pref.split!==true);setClick(pref.click===true);setClickVolume(typeof pref.clickVolume==='number'?Math.max(0,Math.min(1,pref.clickVolume)):.35);}catch{}
@@ -333,11 +340,22 @@ export default function Bndrm({cloud=false,canEdit=true,cacheScope='',workspaceN
   function choose(s:Song,stageNext=false){if(!host||!allowTimingNavigation())return;if(perform&&stageLocked&&!stageNext){notify('Stage is locked. Unlock it to change songs outside Next.');return;}enableAudioOnSelection();setPage('prepare');setPrepareTool('chart');setPerform(false);window.scrollTo({top:0});setLoop(undefined);setRate(1);engine.current?.stop();setManualSection(null);if(cred)void work('Selecting song',()=>action('select',{songId:s.id}));else{setSelected(s.id);setLocalTransport({...stopped,run:crypto.randomUUID()});}if(stageNext){setPage('perform');setPerform(true);setStageLocked(true)}}
   async function play(start?:number,settings?:{rate:number;loop?:LoopRange}){
     const playRate=settings?.rate??rate,playLoop=settings?settings.loop:loop;
+    const request=++soloPlayRequest.current;
     if(!song)return;const target=song.id;await arm();if(cloud)await mapAudio(requiredStems(song,audience,playsTracks),async stem=>{await authorizePrivateAudio(song.id,stem,cred,cacheScope)},2);await engine.current!.prepareRate(playRate);const pending=preparation.current;if(pending?.songId===target)await pending.promise;if(songRef.current?.id!==target)return;if(!requiredStems(song,audience,playsTracks).every(st=>song.demo||engine.current!.hasStem(song.id,st))){notify('Audio is still preparing. Try again shortly.');return;}manualStop.current='';
     if(cred){const calibration=calibratedClock(clock.current.samples,performance.now());if(sync.samples<3||!calibration?.fresh||calibration.uncertainty>100){notify('Wait for a stable clock connection before starting the band.');return;}await api('sessions/'+cred.code+'/ready','POST',{ready:true,songId:target,run:transport.run,clockError:calibration.uncertainty,protocol:3,compact:cloud});await action('play',{offset:start??(position>=song.duration?0:position),rate:playRate,loop:playLoop});}
-    else{const proposed=start??(position>=song.duration?0:position),offset=playLoop&&(proposed<playLoop.start||proposed>=playLoop.end)?playLoop.start:proposed,countIn=countInSeconds(song,offset)/playRate;setLocalTransport({status:'playing',run:crypto.randomUUID(),startAt:now()+600+countIn*1000,offset,countIn,rate:playRate,loop:playLoop});}
+    else{
+      const proposed=start??(position>=song.duration?0:position);
+      const offset=playLoop&&(proposed<playLoop.start||proposed>=playLoop.end)?playLoop.start:proposed;
+      const countIn=countInSeconds(song,offset)/playRate;
+      const playback={status:'preparing' as const,run:crypto.randomUUID(),startAt:0,offset,countIn,rate:playRate,loop:playLoop};
+      const audio=engine.current!;
+      await audio.preparePlayback(song,playback);
+      if(songRef.current?.id!==target||request!==soloPlayRequest.current)return;
+      const lead=Math.max(600,(audio.latency+.2)*1000-audio.adjustment);
+      setLocalTransport({...playback,status:'playing',startAt:now()+lead+countIn*1000});
+    }
   }
-  async function stop(reset=false){manualStop.current=transport.run;engine.current?.stop();if(cred&&host){try{await action('stop',{offset:reset?0:position})}catch(error){setAudioEnabled(false);throw error}}else if(!cred)setLocalTransport({...stopped,run:crypto.randomUUID(),offset:reset?0:position});else{manualStop.current=transport.run;setAudioEnabled(false);notify('Stopped audio on this device. Enable audio to rejoin the band.');}}
+  async function stop(reset=false){soloPlayRequest.current++;manualStop.current=transport.run;engine.current?.stop();if(cred&&host){try{await action('stop',{offset:reset?0:position})}catch(error){setAudioEnabled(false);throw error}}else if(!cred)setLocalTransport({...stopped,run:crypto.randomUUID(),offset:reset?0:position});else{manualStop.current=transport.run;setAudioEnabled(false);notify('Stopped audio on this device. Enable audio to rejoin the band.');}}
   async function seek(value:number){if(!host)return;if(perform&&stageLocked){notify('Stage is locked. Unlock it to seek.');return;}if(playing){await play(value);return;}if(cred)await action('stop',{offset:value});else setLocalTransport({...stopped,run:crypto.randomUUID(),offset:value});setManualSection(null);}
   async function saveMix(updated:Song){
     if(cred){await action('mix',{stems:updated.stems});}

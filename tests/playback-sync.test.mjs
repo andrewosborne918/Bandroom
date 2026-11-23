@@ -138,6 +138,8 @@ test('packedStream falls back to original PCM WAV seamlessly when browser AAC al
  const tail=await stream.chunk(1);
  assert.equal(tail.length,tailFrames);
  assert.ok(Math.abs(tail.getChannelData(0)[0]-0.5)<1e-3);
+ const downloadFailure=packedStream(context,index,async()=>{throw Error('Audio range failed')},{read:fallbackRead,bytes:wavBytes.length});
+ assert.equal((await downloadFailure.chunk(1)).getChannelData(0)[0],.5);
 });
 
 test('count-in matches the song groove BPM and aligns seamlessly onto the first song beat',()=>{
@@ -161,12 +163,18 @@ test('count-in matches the song groove BPM and aligns seamlessly onto the first 
  const lateSong={...song,beatOffset:1.35,analysis:{...song.analysis,beats:beats.map(b=>b+1.0)}};
  const latePlan=countInPlan(lateSong,{startAt,offset:0,countIn:2.0,rate:1});
  assert.equal(latePlan.leadInBeats.length,2);
+ assert.equal(latePlan.firstCountIndex,-4);
  const allClicks=[
   ...Array.from({length:4},(_,i)=>latePlan.countStartMs+i*latePlan.intervalMs),
   ...latePlan.leadInBeats.map(b=>b.at),
   startAt+1350,
  ];
  for(let i=1;i<allClicks.length;i++)assert.ok(Math.abs((allClicks[i]-allClicks[i-1])-500)<1e-6);
+});
+test('count-in uses the steady tempo after erratic opening detections',()=>{
+ const beats=[.1161,.65016,1.09134,1.53252,2.02014,2.5542,3.08825,3.62231,4.17959,4.66721,5.20127,5.73533,6.26939];
+ const song={bpm:112.35,beats:4,countIn:1,beatOffset:beats[0],analysis:{beats}};
+ assert.ok(Math.abs(countInSeconds(song,0)-2.13624)<.0001);
 });
 test('count-in uses the entering tempo and skips a beat just before the playback offset',()=>{
  const beats=[0,.5,1,1.5,2,2.75,3.5,4.25,5,5.75];

@@ -28,7 +28,8 @@ export function localBeatInterval(song:Song,offset:number){
  if(i<0)i=map.length-1;
  // Match the tempo entering playback, including starts just after a tempo change.
  const start=i<map.length-1?i:Math.max(0,map.length-5);
- const end=Math.min(map.length-2,start+3);
+ // The opening can contain pickups that confuse individual detected beats.
+ const end=Math.min(map.length-2,start+(offset===0?11:3));
  const diffs:number[]=[];
  for(let k=start;k<=end;k++){const d=map[k+1]-map[k];if(d>.1&&d<3)diffs.push(d)}
  if(!diffs.length)return fallback;
@@ -58,6 +59,7 @@ export function countInPlan(song:Song,t:Pick<Transport,'startAt'|'offset'|'count
  const anchorMs=t.startAt+phaseSec/rate*1000,countStartMs=anchorMs-t.countIn*1000;
  const leadInBeats:{at:number;index:number}[]=[];
  for(let k=0;k<extraBeats;k++)leadInBeats.push({at:anchorMs+k*intervalMs,index:firstBeatIndex-(extraBeats-k)});
- return {countBeats,firstCountIndex:firstBeatIndex-extraBeats-countBeats,intervalMs,countStartMs,anchorMs,leadInBeats};
+ const firstCountIndex=firstBeatIndex-(t.offset===0?0:extraBeats)-countBeats;
+ return {countBeats,firstCountIndex,intervalMs,countStartMs,anchorMs,leadInBeats};
 }
 export function activeTabCue(section:import('./types').Section|undefined,instrument:string,position:number){return section?.tabCues?.filter(c=>c.instrument===instrument&&c.at<=position).at(-1);}

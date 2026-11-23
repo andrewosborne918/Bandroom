@@ -165,7 +165,7 @@ export class BandAudio {
     let scheduledThrough=this.now()+4;
     const clickAt=(at:number,index:number)=>{
       if(at>=clickStopMs||!this.click||this.audience)return;
-      const audioAt=this.audioTime(at);
+      const audioAt=target+(at-t.startAt)/1000;
       if(audioAt<=ctx.currentTime+.004)return;
       const osc=ctx.createOscillator(),gain=ctx.createGain();
       this.clicks.add(osc);

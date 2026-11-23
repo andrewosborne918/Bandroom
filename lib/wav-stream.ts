@@ -33,13 +33,30 @@ export class WavStream{
  clear(){this.generation++;this.chunks.clear();this.pending.clear()}
  schedule(context:AudioContext,destination:AudioNode,options:{when:number;offset:number;duration:number;stemOffset:number;rate:number;loop?:LoopRange},onError:(error:Error)=>void){
   let stopped=false,busy=false,time=options.when,position=options.offset;const active=new Set<AudioBufferSourceNode>();
+  let failedChunk:{index:number;attempts:number;error:unknown}|undefined;
   const stop=()=>{stopped=true;clearInterval(timer);for(const source of active){source.onended=null;try{source.stop()}catch{}source.disconnect()}active.clear()};
   const wrap=(at:number)=>{const loop=options.loop;if(!loop||at<loop.end)return at;const length=loop.end-loop.start,span=length+(loop.rest||0)*options.rate,phase=(at-loop.start)%span;if(phase>=length){time+=(span-phase)/options.rate;return loop.start}return loop.start+phase};
   const pump=async()=>{if(stopped||busy)return;busy=true;try{
    if(time<context.currentTime-.05){const late=context.currentTime+.03-time;time=context.currentTime+.03;position=wrap(position+late*options.rate)}
    let segments=0;while(!stopped&&time<context.currentTime+8&&segments++<128){position=wrap(position);const boundary=options.loop?.end??options.duration;if(position>=options.duration)break;const sourcePosition=position-options.stemOffset;
     if(sourcePosition<0||sourcePosition>=this.header.duration){const silence=Math.min(boundary-position,sourcePosition<0?-sourcePosition:options.duration-position);if(silence<=0)break;time+=silence/options.rate;position+=silence;continue}
-    const index=Math.floor(sourcePosition/WAV_CHUNK_SECONDS),offset=sourcePosition-index*WAV_CHUNK_SECONDS,buffer=await this.chunk(index);if(stopped)break;
+    const index=Math.floor(sourcePosition/WAV_CHUNK_SECONDS),offset=sourcePosition-index*WAV_CHUNK_SECONDS;
+    if(failedChunk?.index===index&&failedChunk.attempts>=3){
+     if(time>context.currentTime+.05)return;
+     throw failedChunk.error;
+    }
+    let buffer:AudioBuffer;
+    try{
+     buffer=await this.chunk(index);
+     failedChunk=undefined;
+    }catch(error){
+     const attempts=failedChunk?.index===index?failedChunk.attempts+1:1;
+     failedChunk={index,attempts,error};
+     // Let already scheduled audio play while the next segment is retried.
+     if(attempts<3||time>context.currentTime+.05)return;
+     throw error;
+    }
+    if(stopped)break;
     const length=Math.min(buffer.duration-offset,boundary-position,options.duration-position);if(length<=0)break;const drop=Math.max(0,(context.currentTime+.005-time)*options.rate);
     if(drop<length){const source=context.createBufferSource();source.buffer=buffer;source.playbackRate.value=options.rate;source.connect(destination);active.add(source);source.onended=()=>{active.delete(source);source.disconnect()};source.start(time+drop/options.rate,offset+drop,length-drop)}
     time+=length/options.rate;position+=length;

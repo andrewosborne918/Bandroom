@@ -45,6 +45,32 @@ test('independent device clocks schedule the same transport, loops and stem offs
 test('stopping during a slow segment download never starts stale audio',async()=>{
  const file=recording({}),ctx=new Context(),wave=new WavStream(ctx,await wavHeader(file.read,file.total),file.read);let release;wave.read=()=>new Promise(resolve=>release=resolve);const stop=wave.schedule(ctx,{}, {when:1,offset:0,stemOffset:0,duration:240,rate:1},assert.fail);stop();release(new ArrayBuffer(wave.chunkFrames*wave.header.blockAlign));await settle();assert.equal(ctx.sources.length,0);
 });
+test('a transient error loading the next segment keeps the scheduled audio playing',async t=>{
+ const ctx=new Context(),file=recording({seconds:20}),header=await wavHeader(file.read,file.total);
+ const stream=new WavStream(ctx,header,file.read);
+ await stream.prepare(0);
+ const chunk=stream.chunk.bind(stream);
+ let attempts=0,tick;
+ t.mock.method(globalThis,'setInterval',callback=>{tick=callback;return 0});
+ t.mock.method(stream,'chunk',index=>{
+  if(index===2&&attempts++===0)return Promise.reject(Error('Temporary audio segment failure'));
+  return chunk(index);
+ });
+ const stop=stream.schedule(ctx,{}, {when:1,offset:0,duration:20,stemOffset:0,rate:1},assert.fail);
+ try{
+  await settle();
+  ctx.currentTime=2;
+  tick();
+  await settle();
+  assert.equal(attempts,1);
+  assert.deepEqual(ctx.sources.map(s=>s.args[0]),[1,5]);
+  assert.ok(ctx.sources.every(s=>!s.stopped));
+  tick();
+  await settle();
+  assert.equal(attempts,2);
+  assert.deepEqual(ctx.sources.map(s=>s.args[0]),[1,5,9]);
+ }finally{stop()}
+});
 test('streamed stems preserve audience filtering and mixer gains in the audio engine',async()=>{
  const ctx=new Context(),file=recording({seconds:20}),h=await wavHeader(file.read,file.total),engine=new BandAudio();engine.context=ctx;engine.now=()=>0;engine.audience=true;engine.stems=true;
  const song={id:'song',duration:20,bpm:120,beats:4,countIn:0,beatOffset:0,stems:[{id:'music',enabled:true,volume:.7,pan:0},{id:'click',category:'click',bandOnly:true,enabled:true,volume:1}],sections:[]};

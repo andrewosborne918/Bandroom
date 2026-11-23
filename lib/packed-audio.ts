@@ -23,7 +23,13 @@ export function packedStream(context:AudioContext,index:PlaybackIndex,read:Audio
   if(useFallback&&fallback)return decodeOriginal(number)!;
   const segment=index.segments[number];
   if(!segment)throw Error('Audio position is outside this recording.');
-  const data=await read(segment.start,segment.end);
+  let data:ArrayBuffer;
+  try{
+   data=await read(segment.start,segment.end);
+  }catch(error){
+   if(fallback)return decodeOriginal(number)!;
+   throw error;
+  }
   const frames=Math.max(1,Math.round(segment.frames/index.sampleRate*context.sampleRate));
   const partialTail=number===index.segments.length-1&&segment.frames<index.sampleRate*WAV_CHUNK_SECONDS;
   // Legacy MP4 edit lists rounded the ending down to a whole millisecond.
