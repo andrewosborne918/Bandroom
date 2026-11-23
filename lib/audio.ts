@@ -4,6 +4,7 @@ import {WavStream,wavHeader,type AudioRange} from './wav-stream.ts';
 import {safeLoop,transportPosition,loopClock} from './rehearsal.ts';
 import {audioCacheKey,decodedAudioCache,deviceAudioBudget} from './audio-cache.ts';
 import {beatMap} from './analysis.ts';
+import {countInPlan} from './timeline.ts';
 import {restricted} from './stems.ts';
 import type { Song, Transport } from './types';
 export class BandAudio {
@@ -27,10 +28,10 @@ export class BandAudio {
   bufferKeys=new Map<string,string>();
   streams=new Map<string,WavStream>();private streamStops:(()=>void)[]=[];
   onStreamError:(error:Error)=>void=()=>{};
-  async loadWav(songId:string,stem:import('./types').Stem,read:AudioRange,retain:()=>boolean=()=>true,packedBytes?:number){
+  async loadWav(songId:string,stem:import('./types').Stem,read:AudioRange,retain:()=>boolean=()=>true,packedBytes?:number,fallback?:AudioRange){
     const key=audioCacheKey(songId,stem)+(packedBytes?':aac':'');if(this.bufferKeys.get(stem.id)===key&&this.streams.has(stem.id))return;
     const context=this.outputContext();
-    const index=packedBytes?await playbackIndex(read,packedBytes):null;const header=index?{duration:index.frames/index.sampleRate,channels:index.channels,sampleRate:index.sampleRate}:await wavHeader(read,stem.bytes);if(this.streamingBytes+Math.min(24,header.duration)*header.channels*Math.max(header.sampleRate,context.sampleRate)*4>deviceAudioBudget())throw Error('This high-resolution arrangement exceeds this device’s audio memory. Reduce its tracks or use a computer.');const stream=index?packedStream(context,index,read):new WavStream(context,header as import('./wav-stream.ts').WavHeader,read);
+    const index=packedBytes?await playbackIndex(read,packedBytes):null;const header=index?{duration:index.frames/index.sampleRate,channels:index.channels,sampleRate:index.sampleRate}:await wavHeader(read,stem.bytes);if(this.streamingBytes+Math.min(24,header.duration)*header.channels*Math.max(header.sampleRate,context.sampleRate)*4>deviceAudioBudget())throw Error('This high-resolution arrangement exceeds this device’s audio memory. Reduce its tracks or use a computer.');const stream=index?packedStream(context,index,read,fallback?{read:fallback,bytes:stem.bytes}:undefined):new WavStream(context,header as import('./wav-stream.ts').WavHeader,read);
     await stream.prepare(0);if(!retain()||this.context!==context){stream.clear();return}this.streams.get(stem.id)?.clear();this.streams.set(stem.id,stream);this.bufferKeys.set(stem.id,key);
   }
   releaseExcept(keep:Set<string>){for(const id of this.buffers.keys())if(!keep.has(id)){this.buffers.delete(id);this.bufferKeys.delete(id)}for(const [id,stream] of this.streams)if(!keep.has(id)){stream.clear();this.streams.delete(id);this.bufferKeys.delete(id)}}
@@ -138,14 +139,15 @@ export class BandAudio {
     const map=beatMap(song),shift=map?.length?(song.beatOffset-map[0]):0;
     const beats=map?.length?map.map((at,index)=>({at:at+shift,index})):Array.from({length:Math.ceil(song.duration*song.bpm/60)+1},(_,index)=>({at:song.beatOffset+index*60/song.bpm,index}));
     const loopBeats=loop?beats.filter(b=>b.at>=loop.start&&b.at<loop.end):[];
+    const plan=countInPlan(song,t);
     let scheduledThrough=this.now()+4;
     const clickAt=(at:number,index:number)=>{const audioAt=this.audioTime(at);if(audioAt<=ctx.currentTime+.004||!this.click||this.audience)return;const osc=ctx.createOscillator(),gain=ctx.createGain();this.clicks.add(osc);osc.onended=()=>this.clicks.delete(osc);osc.frequency.value=((index%song.beats)+song.beats)%song.beats===0?1500:1000;gain.gain.setValueAtTime(this.clickVolume,audioAt);gain.gain.exponentialRampToValueAtTime(.001,audioAt+.035);osc.connect(gain);this.output(gain,true);osc.start(audioAt);osc.stop(audioAt+.04)};
     const tick=()=>{
       if(!this.ready)return;
       const from=Math.max(scheduledThrough,this.now()+4),until=this.now()+Math.max(180,(this.latency+.15)*1000);
-      const countBeats=song.countIn*song.beats;
-      for(let i=0;t.countIn>0&&i<countBeats;i++){const at=t.startAt-t.countIn*1000+i*t.countIn*1000/Math.max(1,countBeats);if(at>=from&&at<until)clickAt(at,i)}
+      for(let i=0;i<plan.countBeats;i++){const at=plan.countStartMs+i*plan.intervalMs;if(at>=from&&at<until)clickAt(at,i)}
       if(this.generatedClick){
+        for(const b of plan.leadInBeats){if(b.at>=from&&b.at<until)clickAt(b.at,b.index)}
         if(loop){const length=(loop.end-loop.start)/rate+(loop.rest||0),origin=t.startAt+(loop.start-t.offset)/rate*1000;const first=Math.max(0,Math.floor((from-origin)/1000/length));for(let cycle=first;cycle<=first+2;cycle++)for(const b of loopBeats){const at=origin+cycle*length*1000+(b.at-loop.start)/rate*1000;if(at>=t.startAt&&at>=from&&at<until)clickAt(at,b.index)}}
         else {let low=0,high=beats.length;const minimum=t.offset+(from-t.startAt)/1000*rate;while(low<high){const middle=(low+high)>>>1;if(beats[middle].at<minimum)low=middle+1;else high=middle}for(let i=low;i<beats.length;i++){const b=beats[i];const at=t.startAt+(b.at-t.offset)/rate*1000;if(at>=until)break;if(at>=t.startAt&&at>=from&&at<until&&b.at<song.duration){clickAt(at,b.index);this.nextBeat=b.index+1}}}
       }

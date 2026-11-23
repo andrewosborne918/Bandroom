@@ -23,6 +23,7 @@ export function stemTrackGroup(stem:Partial<Stem>):GlobalTrackGroup|null{
  const cat=stem.category||suggest(stem.name||stem.filename||'').category;
  if(cat==='click'||cat==='spoken cues')return null;
  if(cat==='backing vocals'||cat==='vocals')return 'vocals';
+ if(cat==='keys')return 'keyboards';
  if(cat==='drums'||cat==='bass'||cat==='guitar'||cat==='keyboards'||cat==='other')return cat;
  return 'other';
 }
@@ -33,6 +34,10 @@ export function safeGlobalTrackMix(value:unknown):GlobalTrackMix{
  if(solo.length>0)return {muted:[],solo};
  const muted=[...new Set((Array.isArray(v?.muted)?v.muted:[]).filter((x):x is GlobalTrackGroup=>typeof x==='string'&&VALID_GLOBAL_GROUPS.has(x)))];
  return {muted,solo:[]};
+}
+export function safeSetTrackMixes(value:unknown):Record<string,GlobalTrackMix>{
+ if(!value||typeof value!=='object'||Array.isArray(value))return {};
+ return Object.fromEntries(Object.entries(value).filter(([id])=>validId(id)).map(([id,mix])=>[id,safeGlobalTrackMix(mix)]));
 }
 export function isGlobalGroupAudible(mix:GlobalTrackMix,group:GlobalTrackGroup){
  return mix.solo.length>0?mix.solo.includes(group):!mix.muted.includes(group);

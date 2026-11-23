@@ -14,7 +14,7 @@ import ReadinessCheck from './rehearsal/readiness-check';
 import KeepAwake from './rehearsal/keep-awake';
 import StageCues from './rehearsal/stage-cues';
 import BandChart from './rehearsal/band-chart';
-import {EMPTY_GLOBAL_TRACK_MIX,globalTrackSummary,hasGlobalTrackFilter,personalMonitor,safeGlobalTrackMix,safePersonalMix,chartApproved,type GlobalTrackMix,type PersonalMix} from '../lib/band-practice';
+import {EMPTY_GLOBAL_TRACK_MIX,globalTrackSummary,hasGlobalTrackFilter,personalMonitor,safeGlobalTrackMix,safeSetTrackMixes,safePersonalMix,chartApproved,type GlobalTrackMix,type PersonalMix} from '../lib/band-practice';
 import {packGrant,clearRehearsalPacks} from '../lib/rehearsal-pack';
 
 import MixPresets from './rehearsal/mix-presets';
@@ -50,7 +50,7 @@ import SongInfoFields from './song-info-fields';
 import {GuitarTuningFields,GuitarTuningBadge} from './guitar-tuning';
 import { BandAudio } from '../lib/audio';
 import {browser} from '../lib/cloud/browser';
-import { sectionAt, countInSeconds, formatTime, transpose } from '../lib/timeline';
+import { sectionAt, countInSeconds, countInPlan, formatTime, transpose } from '../lib/timeline';
 type Cred={code:string;token:string;host:boolean;role?:'musician'|'audience'};
 const blankSection=():Section=>({id:crypto.randomUUID(),name:'Verse',bars:8,lyrics:'',chords:'',tabs:{}});
 const blankSong=():Song=>({id:'',title:'',artist:'',bpm:120,beats:4,denominator:4,key:'C',countIn:1,beatOffset:0,duration:120,stems:[],sections:[blankSection()]});
@@ -63,7 +63,9 @@ export default function Bndrm({cloud=false,canEdit=true,cacheScope='',workspaceN
   const [catalog,setCatalog]=useState<CatalogSong[]>([]),[catalogQuery,setCatalogQuery]=useState('');const catalogRequest=useRef(0);
   const [page,setPage]=useState<'library'|'prepare'|'perform'>('library'),[darkStage,setDarkStage]=useState(true);
   const [prepareTool,setPrepareTool]=useState<'chart'|'audio'|'practice'|'timing'>('chart'),[editOrder,setEditOrder]=useState(false);
-  const [stageLocked,setStageLocked]=useState(true),[personalMix,setPersonalMix]=useState<PersonalMix>({}),[globalTrackMix,setGlobalTrackMix]=useState<GlobalTrackMix>(EMPTY_GLOBAL_TRACK_MIX),[privateNote,setPrivateNote]=useState(''),[packRevision,setPackRevision]=useState(0),[chartDirty,setChartDirty]=useState(false),[online,setOnline]=useState(true);
+  const [stageLocked,setStageLocked]=useState(true),[personalMix,setPersonalMix]=useState<PersonalMix>({}),[privateNote,setPrivateNote]=useState(''),[packRevision,setPackRevision]=useState(0),[chartDirty,setChartDirty]=useState(false),[online,setOnline]=useState(true);
+  const [defaultTrackMix,setDefaultTrackMix]=useState<GlobalTrackMix>(EMPTY_GLOBAL_TRACK_MIX);
+  const [setTrackMixes,setSetTrackMixes]=useState<Record<string,GlobalTrackMix>>({});
   const monitorRef=useRef<Song|null>(null);
   const [timingDirty,setTimingDirty]=useState(false),[timingReset,setTimingReset]=useState(0);
   const [editorTab,setEditorTab]=useState('overview'),[rate,setRate]=useState(1),[loop,setLoop]=useState<LoopRange>();
@@ -71,7 +73,7 @@ export default function Bndrm({cloud=false,canEdit=true,cacheScope='',workspaceN
   const [deleteTarget,setDeleteTarget]=useState<Song|null>(null);
   const [session,setSession]=useState<Session|null>(null),[cred,setCred]=useState<Cred|null>(null),[localTransport,setLocalTransport]=useState<Transport>(stopped);
   const [liveRooms,setLiveRooms]=useState<LiveSession[]>([]);
-  const [modal,setModal]=useState<'song'|'import'|'session'|'join'|'help'|'settings'|'ready'|'pack'|'delete'|null>(null),[editor,setEditor]=useState<Song|null>(null),[files,setFiles]=useState<File[]>([]);
+  const [modal,setModal]=useState<'song'|'import'|'session'|'join'|'help'|'settings'|'ready'|'pack'|'delete'|'track-mix'|null>(null),[editor,setEditor]=useState<Song|null>(null),[files,setFiles]=useState<File[]>([]);
   useModalViewport(modal !== null);
   const [name,setName]=useState(displayName),[instrument,setInstrument]=useState('Guitar'),[sessionName,setSessionName]=useState('Friday night rehearsal'),[joinCode,setJoinCode]=useState('');
   const [joinRole,setJoinRole]=useState<'musician'|'audience'>('musician'),[leaderTracks,setLeaderTracks]=useState(true);
@@ -79,6 +81,7 @@ export default function Bndrm({cloud=false,canEdit=true,cacheScope='',workspaceN
   const [view,setView]=useState('chords'),[showLyrics,setShowLyrics]=useState(true),[showChords,setShowChords]=useState(true),[transposeBy,setTransposeBy]=useState(0),[manualSection,setManualSection]=useState<number|null>(null);
   const [position,setPosition]=useState(0),[beat,setBeat]=useState(-1),[countdown,setCountdown]=useState(''),[flash,setFlash]=useState(false);
   const preparation=useRef<{songId:string;promise:Promise<void>}|null>(null);
+  const preferOriginalRef=useRef(false);
   const [audioPreparation,setAudioPreparation]=useState({done:0,total:0,error:''}),[audioRetry,setAudioRetry]=useState(0),[cacheRevision,setCacheRevision]=useState(0);
   const [preparedRun,setPreparedRun]=useState('');
   const [audioEnabled,setAudioEnabled]=useState(false),[outputInterrupted,setOutputInterrupted]=useState(false);
@@ -90,15 +93,38 @@ export default function Bndrm({cloud=false,canEdit=true,cacheScope='',workspaceN
   const host=!cred||cred.host, audience=!!cred&&cred.role==='audience', playsTracks=audience||leaderTracks, available=session?session.songs:songs;
   const storedSong=available.find(s=>s.id===(session?session.songId:selected))||available[0];
   const song=useMemo(()=>storedSong?expandImportedSections(storedSong):undefined,[storedSong]);
+  const selectedSet=sets.find(s=>s.id===activeSet);
+  const playbackMixSet=!session&&song&&setlist.includes(song.id)?selectedSet:undefined;
+  const editableMixSet=!session&&page==='library'&&modal==='track-mix'?selectedSet:playbackMixSet;
+  const globalTrackMix=playbackMixSet&&Object.hasOwn(setTrackMixes,playbackMixSet.id)?setTrackMixes[playbackMixSet.id]:defaultTrackMix;
+  const editableTrackMix=editableMixSet&&Object.hasOwn(setTrackMixes,editableMixSet.id)?setTrackMixes[editableMixSet.id]:defaultTrackMix;
   const approvedChart=useMemo(()=>song?chartApproved(song):false,[song]);
   const monitorSong=useMemo(()=>song?personalMonitor(song,personalMix,audience,globalTrackMix):undefined,[song,personalMix,audience,globalTrackMix]);
   monitorRef.current=monitorSong||null;
   const personalKey='bndrm-practice-personal-v1:'+cacheScope+':'+(song?.id||'');
   const globalTrackKey='bndrm-global-track-mix-v1'+(cacheScope?':'+cacheScope:'');
+  const setTrackKey='bndrm-set-track-mixes-v1'+(cacheScope?':'+cacheScope:'');
   useEffect(()=>{try{const saved=JSON.parse(localStorage.getItem(personalKey)||'{}');setPersonalMix(safePersonalMix(saved.mix,song?.stems||[]));setPrivateNote(typeof saved.note==='string'?saved.note.slice(0,4000):'')}catch{setPersonalMix({});setPrivateNote('')}},[personalKey]);
-  useEffect(()=>{try{setGlobalTrackMix(safeGlobalTrackMix(JSON.parse(localStorage.getItem(globalTrackKey)||'null')))}catch{setGlobalTrackMix(EMPTY_GLOBAL_TRACK_MIX)}},[globalTrackKey]);
+  useEffect(()=>{
+    try{setDefaultTrackMix(safeGlobalTrackMix(JSON.parse(localStorage.getItem(globalTrackKey)||'null')))}
+    catch{setDefaultTrackMix(EMPTY_GLOBAL_TRACK_MIX)}
+    try{setSetTrackMixes(safeSetTrackMixes(JSON.parse(localStorage.getItem(setTrackKey)||'null')))}
+    catch{setSetTrackMixes({})}
+  },[globalTrackKey,setTrackKey]);
   const savePersonal=(mix:PersonalMix,note:string)=>{setPersonalMix(mix);setPrivateNote(note);try{localStorage.setItem(personalKey,JSON.stringify({mix,note:note.slice(0,4000)}))}catch{notify('This device could not save your personal settings.')}};
-  const saveGlobalTrackMix=(next:GlobalTrackMix)=>{const clean=safeGlobalTrackMix(next);setGlobalTrackMix(clean);try{localStorage.setItem(globalTrackKey,JSON.stringify(clean))}catch{notify('This device could not save your overall track mutes.')}};
+  function saveTrackMix(next:GlobalTrackMix){
+    const mix=safeGlobalTrackMix(next);
+    try{
+      if(editableMixSet){
+        const updated={...setTrackMixes,[editableMixSet.id]:mix};
+        setSetTrackMixes(updated);
+        localStorage.setItem(setTrackKey,JSON.stringify(updated));
+      }else{
+        setDefaultTrackMix(mix);
+        localStorage.setItem(globalTrackKey,JSON.stringify(mix));
+      }
+    }catch{notify('This device could not save your backing-track mix.')}
+  }
   const transport=session?session.transport:localTransport;
   const playing=transport.status==='playing' && (!!transport.loop||position<(song?.duration||Infinity));
   const resumeOutput=playing&&audioEnabled&&outputInterrupted;
@@ -128,7 +154,14 @@ export default function Bndrm({cloud=false,canEdit=true,cacheScope='',workspaceN
     engine.current=audio;
     audio.now=now;
     audio.onOutputStateChange=state=>setOutputInterrupted(state!=='running');
-    audio.onStreamError=error=>{setLoaded(false);setAudioPreparation(previous=>({...previous,error:error.message}));notify(error.message)};
+    audio.onStreamError=error=>{
+      if(/could not align/i.test(error.message)&&!preferOriginalRef.current){
+        preferOriginalRef.current=true;audio.clearAudio();setLoaded(false);setAudioRetry(n=>n+1);
+        notify('Switched to original audio for this browser. Tap Play to continue.');
+        return;
+      }
+      setLoaded(false);setAudioPreparation(previous=>({...previous,error:error.message}));notify(error.message);
+    };
     try{const pref=JSON.parse(localStorage.getItem('bandroom-preferences')||'{}');setInstrument(pref.instrument||'Guitar');setName(pref.name||displayName);setAdjustment(pref.adjustment||0);setLeaderTracks(pref.leaderTracks!==false);setSplit(pref.split===true);setMono(pref.mono===true&&pref.split!==true);setClick(pref.click===true);setClickVolume(typeof pref.clickVolume==='number'?Math.max(0,Math.min(1,pref.clickVolume)):.35);}catch{}
     setPreferencesReady(true);
     if(cloud||apiOverride)void api('setlists').then(async r=>{setSets(r.sets);const first=r.sets.find((x:SavedSet)=>x.isDefault)||r.sets[0];if(first){setActiveSet(first.id);setSetlist(first.ids);if(first.ids.length){const loaded=await api('songs?ids='+first.ids.join(','));setSongs(prev=>[...new Map([...prev,...loaded.songs].map((s:Song)=>[s.id,s])).values()]);}}setSetlistLoaded(true)}).catch(e=>notify(e.message));
@@ -171,8 +204,11 @@ export default function Bndrm({cloud=false,canEdit=true,cacheScope='',workspaceN
       await mapAudio(required,async stem=>{
         const authorized=cloud?await authorizePrivateAudio(song.id,stem,cred,cacheScope):null;
         if(!alive)return;
-        if(authorized&&(authorized.playback||/\.wav$/i.test(stem.filename))){
-          const source=authorized.playback||authorized;try{await e.loadWav(song.id,stem,source.range,()=>alive,authorized.playback?.bytes)}catch(error){if(!authorized.playback||!/\.wav$/i.test(stem.filename))throw error;await e.loadWav(song.id,stem,authorized.range,()=>alive)}
+        const usePlayback=!!(authorized?.playback&&!preferOriginalRef.current);
+        if(authorized&&(usePlayback||/\.wav$/i.test(stem.filename))){
+          const source=usePlayback?authorized.playback!:authorized;
+          const fallback=usePlayback&&/\.wav$/i.test(stem.filename)?authorized.range:undefined;
+          try{await e.loadWav(song.id,stem,source.range,()=>alive,usePlayback?authorized.playback!.bytes:undefined,fallback)}catch(error){if(!usePlayback||!/\.wav$/i.test(stem.filename))throw error;await e.loadWav(song.id,stem,authorized.range,()=>alive)}
         }else if(!e.hasStem(song.id,stem)){
           const loader=authorized?authorized.load:async()=>{const path='audio/'+song.id+'/'+stem.id+(cred?'?session='+cred.code:'');const response=await fetch('/api/band/'+path,{headers:cred?{'x-band-token':cred.token}:{}});if(!response.ok)throw Error('Could not load '+stem.name);return response.arrayBuffer()};
           try{await e.loadStem(song.id,stem,loader,()=>alive,true)}catch(error){if(!authorized||!(error instanceof DOMException)||error.name!=='EncodingError')throw error;await deviceAudioCache.remove(authorized.key);await e.loadStem(song.id,stem,loader,()=>alive,true)}
@@ -218,10 +254,14 @@ export default function Bndrm({cloud=false,canEdit=true,cacheScope='',workspaceN
   useEffect(()=>{
     let frame:number;const draw=()=>{
       const s=songRef.current,t=transportRef.current;
-      if(s&&t.status==='playing'&&t.run!==manualStop.current){const serverNow=now()-(engine.current?.adjustment||0),pos=transportPosition(t,serverNow,s.duration);setPosition(Math.floor(pos*20)/20);
-        const before=(t.startAt-serverNow)/1000;
-        if(before>t.countIn){setCountdown('Starting in '+Math.ceil(before-t.countIn));setBeat(-1);setFlash(false);}
-        else if(before>0){const interval=t.countIn/Math.max(1,s.countIn*s.beats),index=Math.floor((t.countIn-before)/interval);setCountdown('Count-in');setBeat(((index%s.beats)+s.beats)%s.beats);setFlash(((t.countIn-before)/interval)%1<.16)}else if(loopClock(t,serverNow,s.duration).restRemaining>0){setCountdown('Rest · '+Math.ceil(loopClock(t,serverNow,s.duration).restRemaining)+'s');setBeat(-1);setFlash(false)}else if(!clickReady(s)){setCountdown('Timing not analyzed');setBeat(-1);setFlash(false)}else{setCountdown(before>0?'Count-in':'');const musical=beatAt(s,pos),whole=musical.index;setBeat(whole<0?-1:((whole%s.beats)+s.beats)%s.beats);setFlash(musical.fraction>=0&&musical.fraction<.16&&pos<s.duration);}
+      if(s&&t.status==='playing'&&t.run!==manualStop.current){const serverNow=now()-(engine.current?.adjustment||0),pos=transportPosition(t,serverNow,s.duration);setPosition(pos>=s.duration?s.duration:Math.floor(pos*20)/20);
+        const plan=countInPlan(s,t);
+        if(plan.countBeats>0&&serverNow<plan.countStartMs){setCountdown('Starting in '+Math.ceil((plan.countStartMs-serverNow)/1000));setBeat(-1);setFlash(false);}
+        else if(plan.countBeats>0&&serverNow<plan.anchorMs){const elapsed=(serverNow-plan.countStartMs)/plan.intervalMs,index=Math.floor(elapsed);setCountdown('Count-in');setBeat(((index%s.beats)+s.beats)%s.beats);setFlash((elapsed%1)<.16)}
+        else if(serverNow<t.startAt){setCountdown('Starting in '+Math.ceil((t.startAt-serverNow)/1000));setBeat(-1);setFlash(false);}
+        else if(loopClock(t,serverNow,s.duration).restRemaining>0){setCountdown('Rest · '+Math.ceil(loopClock(t,serverNow,s.duration).restRemaining)+'s');setBeat(-1);setFlash(false)}
+        else if(!clickReady(s)){setCountdown('Timing not analyzed');setBeat(-1);setFlash(false)}
+        else{setCountdown('');const musical=beatAt(s,pos),whole=musical.index;setBeat(whole<0?-1:((whole%s.beats)+s.beats)%s.beats);setFlash(musical.fraction>=0&&musical.fraction<.16&&pos<s.duration);}
       } else {setBeat(-1);setFlash(false);setCountdown(t.status==='preparing'?'Preparing all devices…':'');setPosition(t.offset);}
       frame=requestAnimationFrame(draw);
     };frame=requestAnimationFrame(draw);return()=>cancelAnimationFrame(frame);
@@ -318,7 +358,6 @@ export default function Bndrm({cloud=false,canEdit=true,cacheScope='',workspaceN
   const showDragHandles=!session&&canEdit&&ordered.length>1;
   const setlistDrag=useSetlistDrag(showDragHandles&&!busy,moveSetSong);
   const [removedSetEntry,setRemovedSetEntry]=useState<{id:string;index:number}|null>(null);
-  const selectedSet=sets.find(s=>s.id===activeSet);
   const setDirty=!!selectedSet&&JSON.stringify(selectedSet.ids)!==JSON.stringify(setlist);
   useEffect(()=>{if(!setDirty)return;const warn=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue=''};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn)},[setDirty]);
   const completedJobs=processingJobs.filter(j=>j.status==='completed').map(j=>j.id).join(',');
@@ -342,7 +381,7 @@ export default function Bndrm({cloud=false,canEdit=true,cacheScope='',workspaceN
     if(preset!=='no-click'&&clickVolume===0)setClickVolume(.35);
   }
   const outputPresets=!audience?<AudioOutputPresets value={audioPreset} routingLocked={routingLocked||!!busy} clickAvailable={!song||clickReady(song)} onChange={applyAudioPreset}/>:null;
-  const globalTracks=!audience?<GlobalTrackFilter value={globalTrackMix} onChange={saveGlobalTrackMix}/>:null;
+  const globalTracks=!audience?<GlobalTrackFilter value={editableTrackMix} setName={editableMixSet?.name} onChange={saveTrackMix}/>:null;
   const globalFilterActive=!audience&&hasGlobalTrackFilter(globalTrackMix);
   const globalFilterLabel=globalTrackSummary(globalTrackMix);
   return <div className={'app mode-'+page+' '+(perform?'performance ':'')+(perform&&darkStage?'stage-dark':'')}>
@@ -367,9 +406,16 @@ export default function Bndrm({cloud=false,canEdit=true,cacheScope='',workspaceN
       <div className="side-footer"><button onClick={()=>setModal('help')}><CircleHelp size={16}/> Import guide</button></div>
     </aside>
     <main className="main"><ConnectionStatus/>{cred&&connection==='Connection lost'&&<div className="connection-banner" role="status">Reconnecting to the band. This device pauses after 30 seconds without updates. Reconnect and enable audio to rejoin.</div>}
-      <nav className="workspace-nav" aria-label="Workspace view">{(['library','prepare','perform'] as const).map(mode=><button key={mode} aria-current={page===mode?'page':undefined} onClick={()=>{if(mode!==page&&!allowTimingNavigation())return;setPage(mode);setPerform(mode==='perform');if(mode==='perform'){setStageLocked(true);if(transport.status==='stopped'){setLoop(undefined);setRate(1)}}window.scrollTo({top:0})}}>{mode[0].toUpperCase()+mode.slice(1)}</button>)}{page==='perform'&&<button className="stage-theme" aria-pressed={darkStage} onClick={()=>setDarkStage(v=>!v)}>{darkStage?'Light stage':'Dark stage'}</button>}</nav><SessionConnection deviceRole={audience?'Audience output · music only':host?'Leader · controls band':'Musician · follows band'} session={session} connection={connection} available={liveRooms} canCreate={canEdit} busy={!!busy} onJoin={code=>{setJoinCode(code);setModal('join')}} onCode={()=>setModal('join')} onCreate={()=>setModal('session')} onDetails={()=>setModal('session')} onAudio={()=>setModal('ready')}/><div className="content">{page==='prepare'&&<>{outputPresets}{globalTracks}</>}{page==='perform'&&<details className="stage-setup"><summary>Stage setup · {audience?'Audience · music only':audioPreset==='performance'?'Split output':audioPreset==='practice'?'Mono output':'Click off'}{globalFilterActive?' · '+globalFilterLabel:''}</summary>{outputPresets}{globalTracks}<KeepAwake/><ScoreSizeControl view={view}/><button className="button subtle" onClick={()=>setModal('settings')}>Audio setup &amp; test</button></details>}
+      <nav className="workspace-nav" aria-label="Workspace view">{(['library','prepare','perform'] as const).map(mode=><button key={mode} aria-current={page===mode?'page':undefined} onClick={()=>{if(mode!==page&&!allowTimingNavigation())return;setPage(mode);setPerform(mode==='perform');if(mode==='perform'){setStageLocked(true);if(transport.status==='stopped'){setLoop(undefined);setRate(1)}}window.scrollTo({top:0})}}>{mode[0].toUpperCase()+mode.slice(1)}</button>)}{page==='perform'&&<button className="stage-theme" aria-pressed={darkStage} onClick={()=>setDarkStage(v=>!v)}>{darkStage?'Light stage':'Dark stage'}</button>}</nav><SessionConnection deviceRole={audience?'Audience output · music only':host?'Leader · controls band':'Musician · follows band'} session={session} connection={connection} available={liveRooms} canCreate={canEdit} busy={!!busy} onJoin={code=>{setJoinCode(code);setModal('join')}} onCode={()=>setModal('join')} onCreate={()=>setModal('session')} onDetails={()=>setModal('session')} onAudio={()=>setModal('ready')}/><div className="content">{page==='prepare'&&<>{outputPresets}{globalTracks}</>}{page==='perform'&&<div className={'stage-controls'+(!audience?' has-backing-tracks':'')}>
+        <details className="stage-setup">
+          <summary>Stage setup · {audience?'Audience · music only':audioPreset==='performance'?'Split output':audioPreset==='practice'?'Mono output':'Click off'}</summary>
+          {outputPresets}<KeepAwake/><ScoreSizeControl view={view}/>
+          <button className="button subtle" onClick={()=>setModal('settings')}>Audio setup &amp; test</button>
+        </details>
+        {!audience&&<button className={'button subtle stage-backing-tracks'+(globalFilterActive?' active':'')} aria-haspopup="dialog" onClick={()=>setModal('track-mix')}><SlidersHorizontal size={16}/>Backing tracks</button>}
+      </div>}
         {signIn&&<div className="notice">Sign in to save songs and join sessions. <a href="/" target="_top">Sign in to Bndrm</a></div>}
-        {page==='library'?<><LibraryWorkspace initialQuery={catalogQuery} dirty={setDirty} onSave={()=>void work('Saving setlist',()=>saveSet())} onDiscard={()=>{setSetlist(selectedSet?.ids||[]);setRemovedSetEntry(null)}} onUndo={removedSetEntry?()=>{const removed=removedSetEntry;setSetlist(prev=>{if(prev.includes(removed.id))return prev;const next=[...prev];next.splice(Math.min(removed.index,next.length),0,removed.id);return next});setRemovedSetEntry(null)}:undefined} onDuplicate={()=>void work('Duplicating set',async()=>{if(!selectedSet||setDirty)return;const next=await api('setlists','POST',{name:(selectedSet.name+' copy').slice(0,80)});const saved=await api('setlists/'+next.id,'PUT',{name:next.name,revision:next.revision,ids:setlist});setSets(prev=>[...prev,{...next,ids:[...setlist],revision:saved.revision}]);setActiveSet(next.id)})} onStart={()=>setModal('session')} processingNotice={cloud?<ProcessingQueue canEdit={canEdit} onJobsChange={setProcessingJobs}/>:undefined} localSearch={!!session} setSongs={ordered} onMove={reorder} onDelete={summary=>void work('Opening song',async()=>{const full=songs.find(s=>s.id===summary.id)||await api('songs/'+summary.id);requestDelete(full)})} songs={session?session.songs.map(s=>({...s,stemCount:s.stems.length,reviewed:!!s.info?.playbackConfirmed})):catalog.map(s=>({...s,processingStatus:processingJobs.find(j=>j.songId===s.id)?.status}))} canChoose={host} selected={song?.id} setIds={session?session.songs.map(s=>s.id):setlist} sets={session?[{id:'session',name:session.name,ids:session.songs.map(s=>s.id),revision:session.revision}]:sets} activeSet={session?'session':activeSet} canEdit={canEdit&&!session} hasMore={!session&&nextOffset!==null} busy={!!busy} onMore={()=>void work('Loading songs',loadMore)} onChoose={summary=>{if(session){const full=session.songs.find(s=>s.id===summary.id);if(full)choose(full)}else void work('Opening song',()=>openCatalog(summary))}} onEdit={summary=>void work('Opening editor',()=>openCatalog(summary,true))} onAdd={()=>edit()} onSearch={query=>void searchCatalog(query).catch(e=>notify(e.message))} onToggle={id=>void work('Updating setlist',()=>toggleSet(id))} onSet={id=>{if(!session)void work('Opening setlist',()=>switchSet(id))}} onCreate={createSet} onRename={name=>saveSet(name)}/>{!session&&setDirty&&<div className="set-save-banner"><span>You have unsaved changes to this set.</span><button className="button primary" onClick={()=>void work('Saving setlist',()=>saveSet())}>Save setlist</button></div>} {cloud&&<WorkspaceTool title="Prepare setlist for this device"><SetPreparation songs={ordered} scope={cacheScope} credentials={cred} audience={audience} enabled={!playing}/></WorkspaceTool>}</>:loading?<div className="empty-state"><LoaderCircle className="spin"/><h2>Opening your rehearsal desk</h2></div>:!song?<div className="empty-state"><div className="empty-icon"><img src="/branding/bndrm-logo.png" width={48} height={57} alt="Bndrm"/></div><span className="eyebrow">FROM RECORDING TO REHEARSAL</span><h2>Your next rehearsal starts here.</h2><p>Add a recording or your separate tracks. Choose the instruments<br className="desktop"/> you need, then put a shared click and chart on every phone.</p><div className="empty-actions"><button className="button primary" onClick={()=>edit()}><Upload size={17}/> Import your first song</button></div><div className="features"><span><SlidersHorizontal/> Selectable stems</span><span><Activity/> Visual click</span><span><Users/> Shared sessions</span></div></div>:<>
+        {page==='library'?<><LibraryWorkspace initialQuery={catalogQuery} onTrackMix={!session&&selectedSet?()=>setModal('track-mix'):undefined} dirty={setDirty} onSave={()=>void work('Saving setlist',()=>saveSet())} onDiscard={()=>{setSetlist(selectedSet?.ids||[]);setRemovedSetEntry(null)}} onUndo={removedSetEntry?()=>{const removed=removedSetEntry;setSetlist(prev=>{if(prev.includes(removed.id))return prev;const next=[...prev];next.splice(Math.min(removed.index,next.length),0,removed.id);return next});setRemovedSetEntry(null)}:undefined} onDuplicate={()=>void work('Duplicating set',async()=>{if(!selectedSet||setDirty)return;const next=await api('setlists','POST',{name:(selectedSet.name+' copy').slice(0,80)});const saved=await api('setlists/'+next.id,'PUT',{name:next.name,revision:next.revision,ids:setlist});setSets(prev=>[...prev,{...next,ids:[...setlist],revision:saved.revision}]);setActiveSet(next.id)})} onStart={()=>setModal('session')} processingNotice={cloud?<ProcessingQueue canEdit={canEdit} onJobsChange={setProcessingJobs}/>:undefined} localSearch={!!session} setSongs={ordered} onMove={reorder} onDelete={summary=>void work('Opening song',async()=>{const full=songs.find(s=>s.id===summary.id)||await api('songs/'+summary.id);requestDelete(full)})} songs={session?session.songs.map(s=>({...s,stemCount:s.stems.length,reviewed:!!s.info?.playbackConfirmed})):catalog.map(s=>({...s,processingStatus:processingJobs.find(j=>j.songId===s.id)?.status}))} canChoose={host} selected={song?.id} setIds={session?session.songs.map(s=>s.id):setlist} sets={session?[{id:'session',name:session.name,ids:session.songs.map(s=>s.id),revision:session.revision}]:sets} activeSet={session?'session':activeSet} canEdit={canEdit&&!session} hasMore={!session&&nextOffset!==null} busy={!!busy} onMore={()=>void work('Loading songs',loadMore)} onChoose={summary=>{if(session){const full=session.songs.find(s=>s.id===summary.id);if(full)choose(full)}else void work('Opening song',()=>openCatalog(summary))}} onEdit={summary=>void work('Opening editor',()=>openCatalog(summary,true))} onAdd={()=>edit()} onSearch={query=>void searchCatalog(query).catch(e=>notify(e.message))} onToggle={id=>void work('Updating setlist',()=>toggleSet(id))} onSet={id=>{if(!session)void work('Opening setlist',()=>switchSet(id))}} onCreate={createSet} onRename={name=>saveSet(name)}/>{!session&&setDirty&&<div className="set-save-banner"><span>You have unsaved changes to this set.</span><button className="button primary" onClick={()=>void work('Saving setlist',()=>saveSet())}>Save setlist</button></div>} {cloud&&<WorkspaceTool title="Prepare setlist for this device"><SetPreparation songs={ordered} scope={cacheScope} credentials={cred} audience={audience} enabled={!playing}/></WorkspaceTool>}</>:loading?<div className="empty-state"><LoaderCircle className="spin"/><h2>Opening your rehearsal desk</h2></div>:!song?<div className="empty-state"><div className="empty-icon"><img src="/branding/bndrm-logo.png" width={48} height={57} alt="Bndrm"/></div><span className="eyebrow">FROM RECORDING TO REHEARSAL</span><h2>Your next rehearsal starts here.</h2><p>Add a recording or your separate tracks. Choose the instruments<br className="desktop"/> you need, then put a shared click and chart on every phone.</p><div className="empty-actions"><button className="button primary" onClick={()=>edit()}><Upload size={17}/> Import your first song</button></div><div className="features"><span><SlidersHorizontal/> Selectable stems</span><span><Activity/> Visual click</span><span><Users/> Shared sessions</span></div></div>:<>
           <div className="song-header"><div className="song-art"><img src="/branding/bndrm-logo.png" width={28} height={33} alt=""/></div><div className="song-title"><h2>{song.title}</h2><p>{song.artist||'Your band arrangement'}</p><GuitarTuningBadge song={song}/><small className={'chart-approval '+(approvedChart?'approved':'')}>{approvedChart?'Band-approved chart':'Draft chart · needs review'}</small></div><div className="song-meta"><span><strong>{clickReady(song)?song.bpm:"—"}</strong> BPM</span><span><strong>{song.analysis&&!song.analysis.key&&!song.info?.playbackConfirmed?"—":song.key}</strong> KEY</span><span><strong>{song.beats}/{song.denominator}</strong> TIME</span></div>{!session&&canEdit&&<button className="icon-button edit-song" aria-label="Song settings" onClick={()=>edit(song)}><SlidersHorizontal size={20}/></button>}</div>
           {page==='perform'&&<StageCues playing={playing} song={song} next={ordered[ordered.findIndex(s=>s.id===song.id)+1]} position={position} privateNote={privateNote} practice={transport.status==='playing'&&transport.loop?'Practice loop · '+Math.round((transport.rate||1)*100)+'%':undefined} locked={stageLocked} onLock={()=>setStageLocked(v=>!v)}/>}
           {page==='prepare'&&<>
@@ -396,7 +442,8 @@ export default function Bndrm({cloud=false,canEdit=true,cacheScope='',workspaceN
     </main>
     {message&&<div className="toast" role="status"><span>{message}</span><button aria-label="Dismiss notification" onClick={()=>setMessage('')}><X size={16}/></button></div>}
     {busy&&<div className="busy-status" role="status"><LoaderCircle className="spin" size={15}/>{busy}</div>}
-    {modal&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget&&!busy)setModal(null);}}><div className={'modal '+(modal==='song'?'wide prepare-workspace':modal==='import'?'wide':'')} role="dialog" aria-modal="true" aria-label={modal==='delete'?'Delete song':modal==='import'?'Import a song':modal==='song'?'Song editor':modal==='help'?'GarageBand import guide':modal==='settings'?'My setup':modal==='ready'?'Ready to rehearse':modal==='pack'?'Rehearsal pack':'Band session'}><div className="modal-heading"><div><span className="eyebrow">BNDRM</span><h2>{modal==='delete'?'Delete this song?':modal==='import'?'Drop in a song':modal==='song'?(editor?.id?'Edit your song':'Bring in a song'):modal==='help'?'From GarageBand to Bndrm':modal==='settings'?'Make it your own':modal==='ready'?'Ready to rehearse':modal==='pack'?'Prepare this device':modal==='join'?'Join your people':session?'Your session':'Get the band together'}</h2></div><button className="icon-button" aria-label="Close dialog" disabled={!!busy} onClick={()=>setModal(null)}><X size={20}/></button></div>
+    {modal&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget&&!busy)setModal(null);}}><div className={'modal '+(modal==='song'?'wide prepare-workspace':modal==='import'?'wide':'')} role="dialog" aria-modal="true" aria-label={modal==='delete'?'Delete song':modal==='import'?'Import a song':modal==='song'?'Song editor':modal==='help'?'GarageBand import guide':modal==='settings'?'My setup':modal==='track-mix'?'Backing tracks':modal==='ready'?'Ready to rehearse':modal==='pack'?'Rehearsal pack':'Band session'}><div className="modal-heading"><div><span className="eyebrow">BNDRM</span><h2>{modal==='delete'?'Delete this song?':modal==='import'?'Drop in a song':modal==='song'?(editor?.id?'Edit your song':'Bring in a song'):modal==='help'?'From GarageBand to Bndrm':modal==='settings'?'Make it your own':modal==='track-mix'?'Backing tracks':modal==='ready'?'Ready to rehearse':modal==='pack'?'Prepare this device':modal==='join'?'Join your people':session?'Your session':'Get the band together'}</h2></div><button className="icon-button" aria-label="Close dialog" disabled={!!busy} onClick={()=>setModal(null)}><X size={20}/></button></div>
+      {modal==='track-mix'&&globalTracks}
       {modal==='ready'&&<ReadinessCheck heading={false} session={session} song={song} armed={armed} loaded={loaded} clockReady={online&&connection!=='Connection lost'&&sync.samples>=3&&sync.uncertainty<=100} prepared={packReady} deviceName={name} onAudio={()=>setModal('settings')} onPrepare={()=>setModal('pack')}/>}
       {modal==='pack'&&<SetPreparation songs={ordered.length?ordered:song?[song]:[]} scope={cacheScope} credentials={cred} audience={audience} enabled={!playing} onPrepared={()=>setPackRevision(n=>n+1)}/>}
       {modal==='delete'&&deleteTarget&&<><p className="modal-intro">Delete <strong>{deleteTarget.title}</strong> from your library? Its uploaded audio, charts and processing results will be removed, along with its place in your saved setlist. This cannot be undone.</p><div className="modal-bottom"><button className="button subtle" disabled={!!busy} onClick={()=>{setDeleteTarget(null);setModal(null)}}>Keep song</button><button className="button primary delete-song" disabled={!!busy} onClick={()=>void work('Deleting song',()=>deleteSong(deleteTarget))}><Trash2 size={16}/> Delete song</button></div></>}

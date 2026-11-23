@@ -19,8 +19,8 @@ def build_playback(source, target, ffmpeg='ffmpeg'):
                 segment=folder/'segment.wav';encoded=folder/'segment.m4a'
                 with wave.open(str(segment),'wb') as out:
                     out.setparams((channels,2,rate,0,'NONE','not compressed'));out.writeframes(data)
-                # The MP4 edit list describes encoder priming. Raw AAC/ADTS does not.
-                subprocess.run([ffmpeg,'-v','error','-y','-i',str(segment),'-c:a','aac','-b:a',str(BITRATE),'-movflags','+faststart','-use_editlist','1',str(encoded)],check=True,timeout=120)
+                # Store AAC priming and the final edit duration on the source sample grid.
+                subprocess.run([ffmpeg,'-v','error','-y','-i',str(segment),'-c:a','aac','-b:a',str(BITRATE),'-movflags','+faststart','-use_editlist','1','-movie_timescale',str(rate),str(encoded)],check=True,timeout=120)
                 part=encoded.read_bytes();parts.append(part);segments.append({'bytes':len(part),'frames':len(data)//(channels*2)})
         meta={'version':VERSION,'codec':'aac','sampleRate':rate,'channels':channels,'frames':frames,'chunkSeconds':SECONDS,'segments':segments}
         header=json.dumps(meta,separators=(',',':')).encode()

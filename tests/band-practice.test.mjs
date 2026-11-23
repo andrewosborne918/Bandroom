@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {safeRehearsal,addPracticeMarker,practiceParts,chartFingerprint,chartApproved,personalMonitor,safePersonalMix,deviceReadiness,EMPTY_GLOBAL_TRACK_MIX,safeGlobalTrackMix,toggleGlobalTrack,soloGlobalTrack,globalTrackSummary,hasGlobalTrackFilter} from '../lib/band-practice.ts';
+import {safeRehearsal,addPracticeMarker,practiceParts,chartFingerprint,chartApproved,personalMonitor,safePersonalMix,deviceReadiness,EMPTY_GLOBAL_TRACK_MIX,safeGlobalTrackMix,safeSetTrackMixes,stemTrackGroup,toggleGlobalTrack,soloGlobalTrack,globalTrackSummary,hasGlobalTrackFilter} from '../lib/band-practice.ts';
 import {safeLoop,loopClock,transportPosition} from '../lib/rehearsal.ts';
 import {validateSong} from '../lib/cloud/song-validation.ts';
 import {rememberPackGrant,packGrant,clearRehearsalPacks,PACK_WINDOW_MS} from '../lib/rehearsal-pack.ts';
@@ -65,4 +65,18 @@ test('overall track mutes and solos apply across every song without affecting cl
  // Sanitizes invalid saved payloads
  assert.deepEqual(safeGlobalTrackMix({muted:['bass','bogus','bass'],solo:[]}),{muted:['bass'],solo:[]});
  assert.deepEqual(safeGlobalTrackMix({muted:['bass'],solo:['drums','drums','bogus']}),{muted:[],solo:['drums']});
+});
+
+test('saved set mixes restore independently and keep explicit resets',()=>{
+ const mixes=safeSetTrackMixes({
+  'friday-set':{muted:['bass','bass','invalid'],solo:[]},
+  'saturday-set':EMPTY_GLOBAL_TRACK_MIX,
+  'invalid id':{muted:['drums'],solo:[]},
+ });
+ assert.deepEqual(mixes,{
+  'friday-set':{muted:['bass'],solo:[]},
+  'saturday-set':EMPTY_GLOBAL_TRACK_MIX,
+ });
+ assert.deepEqual(safeSetTrackMixes(null),{});
+ assert.equal(stemTrackGroup({name:'Keys',category:'keys'}),'keyboards');
 });

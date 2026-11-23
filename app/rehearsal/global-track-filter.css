@@ -16,6 +16,7 @@
 .global-track-pill[data-audible=false] .global-track-toggle{color:var(--muted);text-decoration:line-through}
 .global-track-only{flex:none;min-height:40px;padding:0 9px;border-left:1px solid var(--line);font-size:.625rem;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);background:transparent}
 .global-track-only:hover{background:var(--panel);color:var(--text)}
+.global-track-pill button:focus-visible{outline-offset:-3px}
 .global-track-pill[data-solo=true] .global-track-only{border-left-color:color-mix(in srgb,var(--selected-text,#fff) 28%,transparent);color:var(--selected-text,#fff)}
 .global-track-pill[data-solo=true] .global-track-only:hover{background:color-mix(in srgb,var(--selected-text,#fff) 14%,transparent)}
 .global-track-hint{display:block;margin-top:8px;font-size:.6875rem;color:var(--muted);line-height:1.45}

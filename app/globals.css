@@ -90,6 +90,11 @@ body{line-height:1.5}h1,h2,h3{color:#1E4D3A}input,select,textarea{accent-color:#
 .timing-actions,.timing-section-targets{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.timing-actions .button,.timing-section-targets .button{white-space:normal;text-align:left;overflow-wrap:anywhere}
 .timing-row-time{display:block!important;font-size:0.6875rem;color:var(--muted);letter-spacing:0;font-weight:500;margin-bottom:6px}.next-timing-target{outline:2px dashed var(--green);outline-offset:-2px}
 .marking-timing{scroll-behavior:auto}.marking-timing [role=button]{cursor:crosshair}
+.timing-time-button{margin-bottom:6px;font-variant-numeric:tabular-nums}
+.timing-line-editor{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px;margin-top:10px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--text);font-size:.8125rem}
+.timing-line-editor label{display:grid;gap:5px}
+.timing-line-editor input{width:9rem;max-width:100%;min-height:42px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);font-size:1rem;font-variant-numeric:tabular-nums}
+.timing-line-editor .button{min-height:42px}
 .chart-panel:has(.chart-timing-controls) .section-tabs,.chart-panel:has(.chart-timing-controls) .section-restart{display:none}
 @media(max-width:650px){.chart-timing-controls{padding:14px}.chart-timing-controls select{font-size:1rem}.timing-actions .button,.timing-section-targets .button{font-size:0.75rem;padding:8px 10px}.chart-timing-entry .button{width:100%}}
 .guitar-tuning-fields{margin:18px 0;padding:18px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
@@ -247,6 +252,10 @@ body:has(.performance):not(:has(.platform-bar)){--workspace-header:0px}
 button:focus-visible,summary:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #b77932;outline-offset:3px}
 .stage-setup{margin:0 0 8px;border-bottom:1px solid var(--line);font-size:.8125rem}
 .stage-setup>summary{cursor:pointer;padding:8px 0;min-height:44px}
+.stage-controls{position:relative}
+.stage-controls.has-backing-tracks .stage-setup>summary{padding-inline-end:148px;min-height:50px;align-content:center}
+.stage-backing-tracks{position:absolute;inset-block-start:3px;inset-inline-end:0;min-height:44px;white-space:nowrap}
+.stage-backing-tracks.active{border-color:var(--green);color:var(--green)}
 .stage-setup[open]{padding-bottom:12px}
 .stage-setup .score-size-toolbar{justify-content:start;border:0;padding:8px 0}
 .performance .content{padding-top:4px}
