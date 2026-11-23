@@ -9,7 +9,34 @@ import {formatTime,transpose} from '../lib/timeline';
 import {diatonicChordsForKey,chordQualitiesFor,nudgeChordOccurrence,replaceChordInSong,updateSectionLine,splitSectionAtLine,autoSplitAnalyzedSections} from '../lib/chart-edit';
 import ChordLine from './chord-line';
 type TimingMode='adjust'|'tap'|'record';
-export default function FollowScore({song,sectionIndex,view,instrument,position,following,transposeBy,showChords,showLyrics,canEdit,canTime,timingToolsVisible=true,onSave,onStart,onFollow,followReset,readPosition,readRecordingPosition,onDirtyChange,timingReset}:{song:Song;sectionIndex:number;view:string;instrument:string;position:number;following:boolean;transposeBy:number;showChords:boolean;showLyrics:boolean;canEdit:boolean;canTime:boolean;timingToolsVisible?:boolean;onSave:(song:Song)=>Promise<void>;onStart:(at:number,recording?:boolean)=>Promise<void>;onFollow:()=>void;followReset:number;readPosition:()=>number;readRecordingPosition:()=>number|null;onDirtyChange:(dirty:boolean)=>void;timingReset:number}){
+function centerStageLine(box:HTMLElement,line:HTMLElement,playing:boolean){
+ const main=box.closest('main');
+ const viewport=window.visualViewport;
+ const viewportTop=viewport?.offsetTop??0;
+ const barTop=main?.querySelector('.transport')?.getBoundingClientRect().top??Infinity;
+ const navBottom=main?.querySelector('.workspace-nav')?.getBoundingClientRect().bottom??viewportTop;
+ const top=Math.max(viewportTop,navBottom)+8;
+ const bottom=Math.min(viewportTop+(viewport?.height??window.innerHeight),barTop)-8;
+ if(bottom<=top)return;
+
+ let bounds=box.getBoundingClientRect();
+ const visibleHeight=Math.min(bounds.bottom,bottom)-Math.max(bounds.top,top);
+ if(playing&&visibleHeight<Math.min(180,box.clientHeight,bottom-top)){
+  window.scrollBy({top:bounds.top-top,behavior:'instant'});
+  bounds=box.getBoundingClientRect();
+ }
+ const visibleTop=Math.max(bounds.top,top),visibleBottom=Math.min(bounds.bottom,bottom);
+ if(visibleBottom<=visibleTop)return;
+
+ const center=(visibleTop+visibleBottom)/2;
+ // Let the last line reach the same reading position as the rest of the chart.
+ box.style.setProperty('--stage-chart-tail',Math.ceil(bounds.bottom-center)+'px');
+ const row=line.getBoundingClientRect();
+ const scrollTop=box.scrollTop+(row.top+row.bottom)/2-center;
+ const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+ box.scrollTo({top:Math.max(0,scrollTop),behavior:reducedMotion?'instant':'smooth'});
+}
+export default function FollowScore({song,sectionIndex,view,instrument,position,following,stage,playing,transposeBy,showChords,showLyrics,canEdit,canTime,timingToolsVisible=true,onSave,onStart,onFollow,followReset,readPosition,readRecordingPosition,onDirtyChange,timingReset}:{song:Song;sectionIndex:number;view:string;instrument:string;position:number;following:boolean;stage:boolean;playing:boolean;transposeBy:number;showChords:boolean;showLyrics:boolean;canEdit:boolean;canTime:boolean;timingToolsVisible?:boolean;onSave:(song:Song)=>Promise<void>;onStart:(at:number,recording?:boolean)=>Promise<void>;onFollow:()=>void;followReset:number;readPosition:()=>number;readRecordingPosition:()=>number|null;onDirtyChange:(dirty:boolean)=>void;timingReset:number}){
  const [draft,setDraft]=useState<Song|null>(null),[history,setHistory]=useState<Song[]>([]),[scope,setScope]=useState('sections'),[next,setNext]=useState(0),[saving,setSaving]=useState(false),[status,setStatus]=useState('');
  const [timingMode,setTimingMode]=useState<TimingMode>('adjust');
  const [adjustment,setAdjustment]=useState<{rowKey:string;seconds:string}|null>(null);
@@ -31,7 +58,21 @@ export default function FollowScore({song,sectionIndex,view,instrument,position,
  useEffect(()=>{onDirtyChange(dirty)},[dirty,onDirtyChange]);
  useEffect(()=>{setDraft(null);setHistory([]);setStatus('');setError('');setNext(0);setRecordingStarted(false);setAdjustment(null);setActiveChordEdit(null);setActiveLineEdit(null)},[song.id,timingReset]);
  useEffect(()=>{setNext(0);setAdjustment(null);setActiveChordEdit(null);setActiveLineEdit(null)},[view,instrument,scope]);
- useEffect(()=>{if(!following||browsing||draft||activeChordEdit||activeLineEdit)return;const box=container.current,row=box?.querySelector<HTMLElement>('[data-current="true"]');if(box&&row){const top=row.getBoundingClientRect().top-box.getBoundingClientRect().top+box.scrollTop-box.clientHeight*.28;box.scrollTo({top:Math.max(0,top),behavior:'smooth'})}},[active,following,browsing,view,draft,activeChordEdit,activeLineEdit]);
+ const stagePlaying=stage&&playing;
+ useEffect(()=>{
+  if(!following||(!stage&&browsing)||draft||activeChordEdit||activeLineEdit)return;
+  const box=container.current,row=box?.querySelector<HTMLElement>('[data-current="true"]');
+  if(!box||!row)return;
+  if(!stage){
+   const top=row.getBoundingClientRect().top-box.getBoundingClientRect().top+box.scrollTop-box.clientHeight*.28;
+   box.scrollTo({top:Math.max(0,top),behavior:'smooth'});
+   return;
+  }
+  const recenter=()=>centerStageLine(box,row,stagePlaying);
+  recenter();
+  window.addEventListener('resize',recenter);
+  return()=>window.removeEventListener('resize',recenter);
+ },[active,song.id,following,browsing,view,draft,activeChordEdit,activeLineEdit,followReset,stage,stagePlaying]);
  useEffect(()=>{if(!following&&lastSection.current!==sectionIndex&&!draft){const box=container.current,row=box?.querySelector<HTMLElement>('[data-section="'+sectionIndex+'"][data-heading="true"]');if(box&&row)box.scrollTo({top:row.getBoundingClientRect().top-box.getBoundingClientRect().top+box.scrollTop,behavior:'smooth'});setBrowsing(true)}lastSection.current=sectionIndex;},[sectionIndex,following,draft]);
  useEffect(()=>{if(following)setBrowsing(false)},[following,song.id,followReset]);
  useEffect(()=>{if(!dirty)return;const warn=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue=''};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn)},[dirty]);
@@ -212,10 +253,10 @@ export default function FollowScore({song,sectionIndex,view,instrument,position,
    {!!problems.length&&<p className="stem-error" role="alert">{problems.join(' ')}</p>}
   </section>}
   {status&&<p className="follow-timing-note" role="status">{status}</p>}
-  {!draft&&(browsing||!following)&&<div className="follow-timing-note">Browsing the full song. {canEdit?'Use Play from here to seek.':''}<button className="button subtle" onClick={()=>{onFollow();setBrowsing(false)}}>Return to current line</button></div>}
+  {!draft&&((!stage&&browsing)||!following)&&<div className="follow-timing-note">Browsing the full song. {canEdit?'Use Play from here to seek.':''}<button className="button subtle" onClick={()=>{onFollow();setBrowsing(false)}}>Return to current line</button></div>}
   {timingToolsVisible&&!draft&&estimated&&<small className="follow-timing-note">Automatic timing uses matched timestamps where available. Other line and tab positions are estimated.</small>}
   {error&&<p role="alert">{error}</p>}
-  <div className={'follow-score-scroll'+(view==='tabs'?' tab-score-view':'')+(draft?' marking-timing':'')} ref={container} style={{fontSize:view==='tabs'?'calc(20px * var(--tab-text-scale,1))':'calc(27px * var(--chart-text-scale,1))'}} onWheel={()=>setBrowsing(true)} onTouchMove={()=>setBrowsing(true)}>{rows.map((row,i)=>{
+  <div className={'follow-score-scroll'+(view==='tabs'?' tab-score-view':'')+(draft?' marking-timing':'')} ref={container} style={{fontSize:view==='tabs'?'calc(20px * var(--tab-text-scale,1))':'calc(27px * var(--chart-text-scale,1))'}} onWheel={stage?undefined:()=>setBrowsing(true)} onTouchMove={stage?undefined:()=>setBrowsing(true)}>{rows.map((row,i)=>{
    const actionable=!!draft&&(scope==='sections'?!!row.heading:!row.heading);
    const tapTarget=actionable&&!adjusting&&!recording;
    const nextRecordingLine=recording&&targets[next]?.key===row.key;

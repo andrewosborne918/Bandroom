@@ -263,7 +263,8 @@ button:focus-visible,summary:focus-visible,a:focus-visible,input:focus-visible,s
 .performance .stage-current h2{font-size:1.25rem;margin:0 0 4px}
 .performance .stage-next{padding-top:6px;margin-top:4px}
 .performance .chart-toolbar{padding:4px 12px}
-.performance .follow-score-scroll{height:max(180px,calc(100dvh - 390px));max-height:none;padding-bottom:80px;scroll-padding-top:12px}
+.performance .follow-score-scroll{height:max(180px,calc(100dvh - 390px));max-height:none;padding-bottom:0;scroll-padding-top:12px}
+.performance .follow-score-scroll::after{content:"";display:block;height:var(--stage-chart-tail,80px)}
 .performance .chart-bottom{padding:6px 12px}
 .transport .transport-controls button,.transport .device-audio-actions button{min-width:44px;min-height:44px}
 .transport{padding-bottom:max(12px,env(safe-area-inset-bottom))}
